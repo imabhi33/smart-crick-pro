@@ -13,7 +13,16 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? [
+        'https://smart-crick-pro.vercel.app',
+        'https://smart-crick-pro.netlify.app',
+        process.env.FRONTEND_URL
+      ].filter(Boolean)
+    : ['http://localhost:4000', 'http://localhost:5173', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
