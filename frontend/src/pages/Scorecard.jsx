@@ -80,11 +80,20 @@ const Scorecard = () => {
           setViewMode(false);
         }
         
-        // If match is in progress, show it
-        if (response.data.status === 'innings1' || response.data.status === 'innings2') {
-          setGameStarted(true);
-        } else if (response.data.status === 'setup') {
+        // Check if we need to show player selection
+        // This happens when: status is setup OR when innings starts but no players selected yet
+        if (response.data.status === 'setup') {
           setShowPlayerSelection(true);
+          setGameStarted(false);
+        } else if ((response.data.status === 'innings1' || response.data.status === 'innings2') && 
+                   (!response.data.striker || !response.data.nonStriker || !response.data.currentBowler)) {
+          // Innings started but players not selected yet (happens at start of innings 2)
+          setShowPlayerSelection(true);
+          setGameStarted(false);
+        } else if (response.data.status === 'innings1' || response.data.status === 'innings2') {
+          // Match is in progress with players selected
+          setGameStarted(true);
+          setShowPlayerSelection(false);
         }
       }
       
@@ -203,7 +212,19 @@ const Scorecard = () => {
       const response = await matchService.updateScore(currentMatchId, scoreData);
       
       if (response.success) {
+        const previousInnings = matchData?.currentInnings;
         setMatchData(response.data);
+        
+        // Check if innings changed (innings 1 ended, innings 2 starting)
+        if (previousInnings === 1 && response.data.currentInnings === 2 && response.data.status === 'innings2') {
+          // Innings changed - need to select new players
+          setGameStarted(false);
+          setShowPlayerSelection(true);
+          setSelectedStriker('');
+          setSelectedNonStriker('');
+          setSelectedBowler('');
+          return;
+        }
         
         // Check if need new bowler
         if (response.data.currentBowler === null && response.data.status !== 'completed') {
@@ -361,11 +382,26 @@ const Scorecard = () => {
       ? matchData.teamA.players 
       : matchData.teamB.players;
 
+    const isInnings2 = matchData.currentInnings === 2;
+    const targetScore = isInnings2 ? matchData.innings1.runs + 1 : null;
+
     return (
       <div className="min-h-screen py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="glass-effect rounded-2xl p-8">
-            <h2 className="text-3xl font-bold gradient-text mb-6 text-center">Select Opening Players</h2>
+            <h2 className="text-3xl font-bold gradient-text mb-6 text-center">
+              {isInnings2 ? `Innings 2 - Select Opening Players` : 'Select Opening Players'}
+            </h2>
+            
+            {isInnings2 && (
+              <div className="bg-primary-blue/20 border border-primary-blue/30 rounded-lg p-4 mb-6 text-center">
+                <div className="text-sm text-gray-400 mb-1">Target Score</div>
+                <div className="text-3xl font-bold text-primary-blue">{targetScore}</div>
+                <div className="text-sm text-gray-400 mt-1">
+                  {matchData.innings1.battingTeam} scored {matchData.innings1.runs}/{matchData.innings1.wickets} in {matchData.innings1.overs} overs
+                </div>
+              </div>
+            )}
             
             {error && (
               <div className="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">
@@ -380,20 +416,28 @@ const Scorecard = () => {
                   Select Striker ({matchData.battingTeam})
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {battingTeamPlayers.map((player, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedStriker(player)}
-                      className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                        selectedStriker === player
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-white/5 hover:bg-white/10'
-                      }`}
-                      disabled={selectedNonStriker === player}
-                    >
-                      {player}
-                    </button>
-                  ))}
+                  {battingTeamPlayers
+                    .filter(player => {
+                      // Filter out players who are already out in current innings
+                      const battingRecord = matchData.battingRecords?.find(
+                        record => record.playerName === player && record.innings === matchData.currentInnings
+                      );
+                      return !battingRecord || !battingRecord.isOut;
+                    })
+                    .map((player, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedStriker(player)}
+                        className={`px-4 py-3 rounded-lg font-medium transition-all ${
+                          selectedStriker === player
+                            ? 'bg-primary-blue text-white'
+                            : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                        disabled={selectedNonStriker === player}
+                      >
+                        {player}
+                      </button>
+                    ))}
                 </div>
               </div>
 
@@ -403,20 +447,28 @@ const Scorecard = () => {
                   Select Non-Striker ({matchData.battingTeam})
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {battingTeamPlayers.map((player, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedNonStriker(player)}
-                      className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                        selectedNonStriker === player
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-white/5 hover:bg-white/10'
-                      }`}
-                      disabled={selectedStriker === player}
-                    >
-                      {player}
-                    </button>
-                  ))}
+                  {battingTeamPlayers
+                    .filter(player => {
+                      // Filter out players who are already out in current innings
+                      const battingRecord = matchData.battingRecords?.find(
+                        record => record.playerName === player && record.innings === matchData.currentInnings
+                      );
+                      return !battingRecord || !battingRecord.isOut;
+                    })
+                    .map((player, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedNonStriker(player)}
+                        className={`px-4 py-3 rounded-lg font-medium transition-all ${
+                          selectedNonStriker === player
+                            ? 'bg-primary-blue text-white'
+                            : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                        disabled={selectedStriker === player}
+                      >
+                        {player}
+                      </button>
+                    ))}
                 </div>
               </div>
 
@@ -742,35 +794,51 @@ const Scorecard = () => {
           <div className="lg:col-span-2 glass-effect rounded-2xl p-6">
             <h3 className="text-xl font-bold mb-4 text-primary-blue">Current Batsmen</h3>
             <div className="space-y-3">
-              {matchData?.striker && (
-                <div className="bg-white/5 rounded-lg p-4 border-l-4 border-primary-green">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-lg">{matchData.striker.name} *</span>
-                    <span className="text-2xl font-bold text-primary-green">{matchData.striker.runs}</span>
+              {matchData?.striker && (() => {
+                // Check if striker is out
+                const strikerRecord = matchData.battingRecords?.find(
+                  record => record.playerName === matchData.striker.name && record.innings === matchData.currentInnings
+                );
+                const isStrikerOut = strikerRecord?.isOut;
+                
+                return !isStrikerOut && (
+                  <div className="bg-white/5 rounded-lg p-4 border-l-4 border-primary-green">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-lg">{matchData.striker.name} *</span>
+                      <span className="text-2xl font-bold text-primary-green">{matchData.striker.runs}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
+                      <div>Balls: {matchData.striker.balls}</div>
+                      <div>4s: {matchData.striker.fours}</div>
+                      <div>6s: {matchData.striker.sixes}</div>
+                      <div>SR: {calculateStrikeRate(matchData.striker.runs, matchData.striker.balls)}</div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
-                    <div>Balls: {matchData.striker.balls}</div>
-                    <div>4s: {matchData.striker.fours}</div>
-                    <div>6s: {matchData.striker.sixes}</div>
-                    <div>SR: {calculateStrikeRate(matchData.striker.runs, matchData.striker.balls)}</div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {matchData?.nonStriker && (
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-lg">{matchData.nonStriker.name}</span>
-                    <span className="text-2xl font-bold">{matchData.nonStriker.runs}</span>
+              {matchData?.nonStriker && (() => {
+                // Check if non-striker is out
+                const nonStrikerRecord = matchData.battingRecords?.find(
+                  record => record.playerName === matchData.nonStriker.name && record.innings === matchData.currentInnings
+                );
+                const isNonStrikerOut = nonStrikerRecord?.isOut;
+                
+                return !isNonStrikerOut && (
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-lg">{matchData.nonStriker.name}</span>
+                      <span className="text-2xl font-bold">{matchData.nonStriker.runs}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
+                      <div>Balls: {matchData.nonStriker.balls}</div>
+                      <div>4s: {matchData.nonStriker.fours}</div>
+                      <div>6s: {matchData.nonStriker.sixes}</div>
+                      <div>SR: {calculateStrikeRate(matchData.nonStriker.runs, matchData.nonStriker.balls)}</div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
-                    <div>Balls: {matchData.nonStriker.balls}</div>
-                    <div>4s: {matchData.nonStriker.fours}</div>
-                    <div>6s: {matchData.nonStriker.sixes}</div>
-                    <div>SR: {calculateStrikeRate(matchData.nonStriker.runs, matchData.nonStriker.balls)}</div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
 
@@ -856,16 +924,17 @@ const Scorecard = () => {
                     <th className="text-center py-3 px-2">4s</th>
                     <th className="text-center py-3 px-2">6s</th>
                     <th className="text-center py-3 px-2">SR</th>
+                    <th className="text-center py-3 px-2">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {matchData.battingRecords
                     .filter(record => record.innings === matchData.currentInnings)
                     .map((record, idx) => (
-                      <tr key={idx} className="border-b border-white/5 hover:bg-white/5">
+                      <tr key={idx} className={`border-b border-white/5 hover:bg-white/5 ${record.isOut ? 'opacity-60' : ''}`}>
                         <td className="py-3 px-2 font-medium">
                           {record.playerName}
-                          {record.playerName === matchData.striker?.name && <span className="text-primary-green ml-1">*</span>}
+                          {!record.isOut && record.playerName === matchData.striker?.name && <span className="text-primary-green ml-1">*</span>}
                         </td>
                         <td className="text-center py-3 px-2 font-bold">{record.runs}</td>
                         <td className="text-center py-3 px-2 text-gray-400">{record.balls}</td>
@@ -873,6 +942,13 @@ const Scorecard = () => {
                         <td className="text-center py-3 px-2 text-gray-400">{record.sixes}</td>
                         <td className="text-center py-3 px-2 text-primary-blue font-semibold">
                           {record.balls > 0 ? ((record.runs / record.balls) * 100).toFixed(1) : '0.0'}
+                        </td>
+                        <td className="text-center py-3 px-2">
+                          {record.isOut ? (
+                            <span className="text-red-400 font-semibold">OUT</span>
+                          ) : (
+                            <span className="text-green-400">-</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -991,32 +1067,48 @@ const Scorecard = () => {
               </div>
               <div className="space-y-3 mb-6 max-h-96 overflow-y-auto pr-2">
                 {matchData?.battingTeam === matchData?.teamA.name 
-                  ? matchData?.teamA.players.map((player, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setNewBatsmanName(player)}
-                        className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                          newBatsmanName === player
-                            ? 'bg-primary-blue text-white'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
-                      >
-                        {player}
-                      </button>
-                    ))
-                  : matchData?.teamB.players.map((player, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setNewBatsmanName(player)}
-                        className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                          newBatsmanName === player
-                            ? 'bg-primary-blue text-white'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
-                      >
-                        {player}
-                      </button>
-                    ))
+                  ? matchData?.teamA.players
+                      .filter(player => {
+                        // Filter out players who are already out
+                        const battingRecord = matchData.battingRecords.find(
+                          record => record.playerName === player && record.innings === matchData.currentInnings
+                        );
+                        return !battingRecord || !battingRecord.isOut;
+                      })
+                      .map((player, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setNewBatsmanName(player)}
+                          className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
+                            newBatsmanName === player
+                              ? 'bg-primary-blue text-white'
+                              : 'bg-white/5 hover:bg-white/10'
+                          }`}
+                        >
+                          {player}
+                        </button>
+                      ))
+                  : matchData?.teamB.players
+                      .filter(player => {
+                        // Filter out players who are already out
+                        const battingRecord = matchData.battingRecords.find(
+                          record => record.playerName === player && record.innings === matchData.currentInnings
+                        );
+                        return !battingRecord || !battingRecord.isOut;
+                      })
+                      .map((player, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setNewBatsmanName(player)}
+                          className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
+                            newBatsmanName === player
+                              ? 'bg-primary-blue text-white'
+                              : 'bg-white/5 hover:bg-white/10'
+                          }`}
+                        >
+                          {player}
+                        </button>
+                      ))
                 }
               </div>
               <button
