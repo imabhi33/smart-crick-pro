@@ -7,7 +7,7 @@ const CreatorDashboard = () => {
   const [myMatches, setMyMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const { user, isMatchCreator } = useAuth();
 
   useEffect(() => {
@@ -54,7 +54,7 @@ const CreatorDashboard = () => {
       case 'setup':
         return (
           <Link
-            to={`/match/${match._id}`}
+            to={`/scorecard/${match._id}`}
             className="px-4 py-2 bg-primary-blue hover:bg-blue-600 rounded-lg font-semibold transition-colors"
           >
             🚀 Start Match
@@ -64,7 +64,7 @@ const CreatorDashboard = () => {
       case 'innings2':
         return (
           <Link
-            to={`/match/${match._id}`}
+            to={`/scorecard/${match._id}`}
             className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold transition-colors"
           >
             📊 Continue Scoring

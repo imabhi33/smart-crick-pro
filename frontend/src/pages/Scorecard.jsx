@@ -9,7 +9,7 @@ const Scorecard = () => {
   const [currentMatchId, setCurrentMatchId] = useState(id || null);
   const [viewMode, setViewMode] = useState(false); // Start in edit mode, will be set based on permissions
   const [isMatchOwner, setIsMatchOwner] = useState(false);
-  
+
   // Match Setup State
   const [matchSetup, setMatchSetup] = useState({
     groundName: '',
@@ -25,13 +25,13 @@ const Scorecard = () => {
   const [matchData, setMatchData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Player Selection
   const [showPlayerSelection, setShowPlayerSelection] = useState(false);
   const [selectedStriker, setSelectedStriker] = useState('');
   const [selectedNonStriker, setSelectedNonStriker] = useState('');
   const [selectedBowler, setSelectedBowler] = useState('');
-  
+
   // Modals
   const [showBowlerInput, setShowBowlerInput] = useState(false);
   const [newBowlerName, setNewBowlerName] = useState('');
@@ -64,29 +64,29 @@ const Scorecard = () => {
     try {
       setLoading(true);
       const response = await matchService.getMatch(matchId);
-      
+
       if (response.success) {
         setMatchData(response.data);
         setCurrentMatchId(response.data._id);
-        
+
         // Check if current user is the match creator or admin
         const canEdit = user && (response.data.createdBy === user._id || isAdmin());
         setIsMatchOwner(canEdit);
-        
+
         // Set view mode: only view-only if user cannot edit AND match is completed
         if (!canEdit || response.data.status === 'completed') {
           setViewMode(true);
         } else {
           setViewMode(false);
         }
-        
+
         // Check if we need to show player selection
         // This happens when: status is setup OR when innings starts but no players selected yet
         if (response.data.status === 'setup') {
           setShowPlayerSelection(true);
           setGameStarted(false);
-        } else if ((response.data.status === 'innings1' || response.data.status === 'innings2') && 
-                   (!response.data.striker || !response.data.nonStriker || !response.data.currentBowler)) {
+        } else if ((response.data.status === 'innings1' || response.data.status === 'innings2') &&
+          (!response.data.striker || !response.data.nonStriker || !response.data.currentBowler)) {
           // Innings started but players not selected yet (happens at start of innings 2)
           setShowPlayerSelection(true);
           setGameStarted(false);
@@ -96,7 +96,7 @@ const Scorecard = () => {
           setShowPlayerSelection(false);
         }
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError('Failed to load match');
@@ -151,13 +151,13 @@ const Scorecard = () => {
       }
 
       const response = await matchService.createMatch(matchSetup);
-      
+
       if (response.success) {
         setCurrentMatchId(response.data._id);
         setMatchData(response.data);
         setShowPlayerSelection(true);
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create match');
@@ -201,7 +201,7 @@ const Scorecard = () => {
     try {
       setLoading(true);
       setError('');
-      
+
       const scoreData = {
         runs,
         isWide,
@@ -210,11 +210,11 @@ const Scorecard = () => {
       };
 
       const response = await matchService.updateScore(currentMatchId, scoreData);
-      
+
       if (response.success) {
         const previousInnings = matchData?.currentInnings;
         setMatchData(response.data);
-        
+
         // Check if innings changed (innings 1 ended, innings 2 starting)
         if (previousInnings === 1 && response.data.currentInnings === 2 && response.data.status === 'innings2') {
           // Innings changed - need to select new players
@@ -225,23 +225,23 @@ const Scorecard = () => {
           setSelectedBowler('');
           return;
         }
-        
+
         // Check if need new bowler
         if (response.data.currentBowler === null && response.data.status !== 'completed') {
           setShowBowlerInput(true);
         }
-        
+
         // Check if need new batsman
         if (isWicket && response.data.striker === null && response.data.status !== 'completed') {
           setShowBatsmanInput(true);
         }
       }
-      
+
       setLoading(false);
     } catch (err) {
       const errorData = err.response?.data;
       setError(errorData?.message || 'Failed to update score');
-      
+
       // Show appropriate modal based on error
       if (errorData?.needsBowler) {
         setShowBowlerInput(true);
@@ -249,7 +249,7 @@ const Scorecard = () => {
       if (errorData?.needsBatsmen) {
         setShowBatsmanInput(true);
       }
-      
+
       setLoading(false);
     }
   };
@@ -258,19 +258,19 @@ const Scorecard = () => {
   const changeBowler = async () => {
     try {
       if (!newBowlerName) return;
-      
+
       setLoading(true);
       const response = await matchService.updateScore(currentMatchId, {
         runs: 0,
         newBowler: newBowlerName
       });
-      
+
       if (response.success) {
         setMatchData(response.data);
         setShowBowlerInput(false);
         setNewBowlerName('');
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to change bowler');
@@ -282,19 +282,19 @@ const Scorecard = () => {
   const addNewBatsman = async () => {
     try {
       if (!newBatsmanName) return;
-      
+
       setLoading(true);
       const response = await matchService.updateScore(currentMatchId, {
         runs: 0,
         newBatsman: newBatsmanName
       });
-      
+
       if (response.success) {
         setMatchData(response.data);
         setShowBatsmanInput(false);
         setNewBatsmanName('');
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to add batsman');
@@ -320,14 +320,14 @@ const Scorecard = () => {
 
       setLoading(true);
       const response = await matchService.endMatch(currentMatchId, endMatchPassword);
-      
+
       if (response.success) {
         setMatchData(response.data);
         setShowEndMatchModal(false);
         setEndMatchPassword('');
         alert('Match ended successfully!');
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid password or failed to end match');
@@ -374,12 +374,12 @@ const Scorecard = () => {
 
   // Player Selection Screen
   if (showPlayerSelection && matchData) {
-    const battingTeamPlayers = matchData.battingTeam === matchData.teamA.name 
-      ? matchData.teamA.players 
+    const battingTeamPlayers = matchData.battingTeam === matchData.teamA.name
+      ? matchData.teamA.players
       : matchData.teamB.players;
-    
-    const bowlingTeamPlayers = matchData.bowlingTeam === matchData.teamA.name 
-      ? matchData.teamA.players 
+
+    const bowlingTeamPlayers = matchData.bowlingTeam === matchData.teamA.name
+      ? matchData.teamA.players
       : matchData.teamB.players;
 
     const isInnings2 = matchData.currentInnings === 2;
@@ -392,7 +392,7 @@ const Scorecard = () => {
             <h2 className="text-3xl font-bold gradient-text mb-6 text-center">
               {isInnings2 ? `Innings 2 - Select Opening Players` : 'Select Opening Players'}
             </h2>
-            
+
             {isInnings2 && (
               <div className="bg-primary-blue/20 border border-primary-blue/30 rounded-lg p-4 mb-6 text-center">
                 <div className="text-sm text-gray-400 mb-1">Target Score</div>
@@ -402,7 +402,7 @@ const Scorecard = () => {
                 </div>
               </div>
             )}
-            
+
             {error && (
               <div className="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">
                 {error}
@@ -428,11 +428,10 @@ const Scorecard = () => {
                       <button
                         key={idx}
                         onClick={() => setSelectedStriker(player)}
-                        className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                          selectedStriker === player
-                            ? 'bg-primary-blue text-white'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
+                        className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedStriker === player
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-white/5 hover:bg-white/10'
+                          }`}
                         disabled={selectedNonStriker === player}
                       >
                         {player}
@@ -459,11 +458,10 @@ const Scorecard = () => {
                       <button
                         key={idx}
                         onClick={() => setSelectedNonStriker(player)}
-                        className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                          selectedNonStriker === player
-                            ? 'bg-primary-blue text-white'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
+                        className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedNonStriker === player
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-white/5 hover:bg-white/10'
+                          }`}
                         disabled={selectedStriker === player}
                       >
                         {player}
@@ -482,11 +480,10 @@ const Scorecard = () => {
                     <button
                       key={idx}
                       onClick={() => setSelectedBowler(player)}
-                      className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                        selectedBowler === player
-                          ? 'bg-primary-green text-black'
-                          : 'bg-white/5 hover:bg-white/10'
-                      }`}
+                      className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedBowler === player
+                        ? 'bg-primary-green text-black'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
                     >
                       {player}
                     </button>
@@ -644,22 +641,20 @@ const Scorecard = () => {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setMatchSetup({ ...matchSetup, battingTeam: matchSetup.teamA.name })}
-                  className={`py-4 rounded-lg font-bold text-lg transition-all ${
-                    matchSetup.battingTeam === matchSetup.teamA.name
-                      ? 'bg-primary-blue text-white'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
+                  className={`py-4 rounded-lg font-bold text-lg transition-all ${matchSetup.battingTeam === matchSetup.teamA.name
+                    ? 'bg-primary-blue text-white'
+                    : 'bg-white/5 hover:bg-white/10'
+                    }`}
                   disabled={!matchSetup.teamA.name}
                 >
                   {matchSetup.teamA.name || 'Team A'}
                 </button>
                 <button
                   onClick={() => setMatchSetup({ ...matchSetup, battingTeam: matchSetup.teamB.name })}
-                  className={`py-4 rounded-lg font-bold text-lg transition-all ${
-                    matchSetup.battingTeam === matchSetup.teamB.name
-                      ? 'bg-primary-green text-black'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
+                  className={`py-4 rounded-lg font-bold text-lg transition-all ${matchSetup.battingTeam === matchSetup.teamB.name
+                    ? 'bg-primary-green text-black'
+                    : 'bg-white/5 hover:bg-white/10'
+                    }`}
                   disabled={!matchSetup.teamB.name}
                 >
                   {matchSetup.teamB.name || 'Team B'}
@@ -689,7 +684,7 @@ const Scorecard = () => {
             <div className="text-6xl mb-6">🏆</div>
             <h1 className="text-4xl font-bold gradient-text mb-4">Match Complete!</h1>
             <div className="text-3xl font-bold text-primary-green mb-8">{matchData.result}</div>
-            
+
             <div className="grid grid-cols-2 gap-6 mb-8">
               <div className="bg-white/5 rounded-xl p-6">
                 <div className="text-sm text-gray-400 mb-2">1st Innings</div>
@@ -757,16 +752,16 @@ const Scorecard = () => {
             </div>
             <div className="flex gap-2">
               {!viewMode && (
-                <button 
-                  onClick={() => setShowEndMatchModal(true)} 
+                <button
+                  onClick={() => setShowEndMatchModal(true)}
                   className="px-4 py-2 bg-red-500/20 border border-red-500 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
                 >
                   🔒 End Match
                 </button>
               )}
               {!viewMode && (
-                <button 
-                  onClick={resetMatch} 
+                <button
+                  onClick={resetMatch}
                   className="px-4 py-2 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors"
                 >
                   New Match
@@ -774,7 +769,7 @@ const Scorecard = () => {
               )}
             </div>
           </div>
-          
+
           {/* Score Display */}
           <div className="text-center py-6 border-y border-white/10">
             <div className="text-6xl font-bold gradient-text mb-2">
@@ -800,7 +795,7 @@ const Scorecard = () => {
                   record => record.playerName === matchData.striker.name && record.innings === matchData.currentInnings
                 );
                 const isStrikerOut = strikerRecord?.isOut;
-                
+
                 return !isStrikerOut && (
                   <div className="bg-white/5 rounded-lg p-4 border-l-4 border-primary-green">
                     <div className="flex justify-between items-center mb-2">
@@ -823,7 +818,7 @@ const Scorecard = () => {
                   record => record.playerName === matchData.nonStriker.name && record.innings === matchData.currentInnings
                 );
                 const isNonStrikerOut = nonStrikerRecord?.isOut;
-                
+
                 return !isNonStrikerOut && (
                   <div className="bg-white/5 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-2">
@@ -1008,116 +1003,282 @@ const Scorecard = () => {
         )}
 
         {/* Modals - Only show if not in view mode */}
+        {/* Match Equation & Run Rates */}
+        <div className="glass-effect rounded-2xl p-6 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-3 bg-white/5 rounded-xl">
+              <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Current Run Rate</div>
+              <div className="text-2xl font-bold text-white">
+                {(() => {
+                  const innings = matchData.currentInnings === 1 ? matchData.innings1 : matchData.innings2;
+                  const overs = innings.overs + (innings.balls % 6) / 6;
+                  return overs > 0 ? (innings.runs / overs).toFixed(2) : '0.00';
+                })()}
+              </div>
+            </div>
+
+            {matchData.currentInnings === 2 && (
+              <>
+                <div className="p-3 bg-white/5 rounded-xl">
+                  <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Required Run Rate</div>
+                  <div className="text-2xl font-bold text-primary-green">
+                    {(() => {
+                      const target = matchData.innings1.runs + 1;
+                      const runsNeeded = target - matchData.innings2.runs;
+                      const ballsRemaining = (matchData.totalOvers * 6) - matchData.innings2.balls;
+                      const oversRemaining = ballsRemaining / 6;
+                      return oversRemaining > 0 && runsNeeded > 0
+                        ? (runsNeeded / oversRemaining).toFixed(2)
+                        : '-';
+                    })()}
+                  </div>
+                </div>
+                <div className="p-3 bg-white/5 rounded-xl col-span-2 md:col-span-2">
+                  <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Match Equation</div>
+                  <div className="text-xl font-bold text-white">
+                    Need <span className="text-primary-green">{matchData.innings1.runs + 1 - matchData.innings2.runs}</span> runs in <span className="text-primary-blue">{(matchData.totalOvers * 6) - matchData.innings2.balls}</span> balls
+                  </div>
+                </div>
+              </>
+            )}
+
+            {matchData.currentInnings === 1 && (
+              <div className="p-3 bg-white/5 rounded-xl col-span-2 md:col-span-3">
+                <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Projected Score</div>
+                <div className="text-xl font-bold text-white">
+                  {(() => {
+                    const innings = matchData.innings1;
+                    const overs = innings.overs + (innings.balls % 6) / 6;
+                    const crr = overs > 0 ? innings.runs / overs : 0;
+                    return crr > 0 ? Math.round(crr * matchData.totalOvers) : '-';
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modals - Only show if not in view mode */}
         {!viewMode && showBowlerInput && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-            <div className="glass-effect rounded-2xl p-8 max-w-md w-full my-8 animate-fade-in border-2 border-primary-green/30">
-              <div className="text-center mb-6">
+            <div className="glass-effect rounded-2xl p-8 max-w-2xl w-full my-8 animate-fade-in border-2 border-primary-green/30">
+              <div className="text-center mb-8">
                 <div className="text-5xl mb-3">🎳</div>
-                <h3 className="text-2xl font-bold gradient-text mb-2">Change Bowler</h3>
-                <p className="text-gray-400 text-sm">Over complete! Select next bowler:</p>
+                <h3 className="text-3xl font-bold gradient-text mb-2">Select Next Bowler</h3>
+                <p className="text-gray-400">Choose a bowler for the next over</p>
               </div>
-              <div className="space-y-3 mb-6 max-h-96 overflow-y-auto pr-2">
-                {matchData?.bowlingTeam === matchData?.teamA.name 
-                  ? matchData?.teamA.players.map((player, idx) => (
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {matchData?.bowlingTeam === matchData?.teamA.name
+                  ? matchData?.teamA.players.map((player, idx) => {
+                    // Check if player just bowled the last over
+                    const lastBall = matchData.ballByBall && matchData.ballByBall.length > 0
+                      ? matchData.ballByBall[matchData.ballByBall.length - 1]
+                      : null;
+                    const lastBowler = lastBall ? lastBall.bowler : null;
+                    const isLastBowler = lastBowler === player;
+                    const isSelected = newBowlerName === player;
+
+                    return (
                       <button
                         key={idx}
-                        onClick={() => setNewBowlerName(player)}
-                        className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                          newBowlerName === player
-                            ? 'bg-primary-green text-black'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
+                        onClick={() => !isLastBowler && setNewBowlerName(player)}
+                        disabled={isLastBowler}
+                        className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
+                            ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                            : isLastBowler
+                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          }`}
                       >
-                        {player}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className={`font-bold text-lg ${isSelected ? 'text-primary-green' : 'text-white'}`}>
+                              {player}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">Bowler</div>
+                          </div>
+                          {isSelected && (
+                            <div className="h-6 w-6 rounded-full bg-primary-green flex items-center justify-center text-black text-xs">
+                              ✓
+                            </div>
+                          )}
+                        </div>
+                        {isLastBowler && (
+                          <div className="mt-2 inline-block px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">
+                            JUST BOWLED
+                          </div>
+                        )}
                       </button>
-                    ))
-                  : matchData?.teamB.players.map((player, idx) => (
+                    );
+                  })
+                  : matchData?.teamB.players.map((player, idx) => {
+                    // Check if player just bowled the last over
+                    const lastBall = matchData.ballByBall && matchData.ballByBall.length > 0
+                      ? matchData.ballByBall[matchData.ballByBall.length - 1]
+                      : null;
+                    const lastBowler = lastBall ? lastBall.bowler : null;
+                    const isLastBowler = lastBowler === player;
+                    const isSelected = newBowlerName === player;
+
+                    return (
                       <button
                         key={idx}
-                        onClick={() => setNewBowlerName(player)}
-                        className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                          newBowlerName === player
-                            ? 'bg-primary-green text-black'
-                            : 'bg-white/5 hover:bg-white/10'
-                        }`}
+                        onClick={() => !isLastBowler && setNewBowlerName(player)}
+                        disabled={isLastBowler}
+                        className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
+                            ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                            : isLastBowler
+                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          }`}
                       >
-                        {player}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className={`font-bold text-lg ${isSelected ? 'text-primary-green' : 'text-white'}`}>
+                              {player}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">Bowler</div>
+                          </div>
+                          {isSelected && (
+                            <div className="h-6 w-6 rounded-full bg-primary-green flex items-center justify-center text-black text-xs">
+                              ✓
+                            </div>
+                          )}
+                        </div>
+                        {isLastBowler && (
+                          <div className="mt-2 inline-block px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">
+                            JUST BOWLED
+                          </div>
+                        )}
                       </button>
-                    ))
+                    );
+                  })
                 }
               </div>
-              <button
-                onClick={changeBowler}
-                disabled={!newBowlerName || loading}
-                className="w-full py-3 bg-gradient-to-r from-primary-blue to-primary-green rounded-lg font-bold hover:scale-105 transition-transform disabled:opacity-50"
-              >
-                Continue
-              </button>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={changeBowler}
+                  disabled={!newBowlerName || loading}
+                  className="px-8 py-3 bg-gradient-to-r from-primary-blue to-primary-green rounded-xl font-bold hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                >
+                  Confirm Bowler
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {!viewMode && showBatsmanInput && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-            <div className="glass-effect rounded-2xl p-8 max-w-md w-full my-8 animate-fade-in border-2 border-primary-blue/30">
-              <div className="text-center mb-6">
+            <div className="glass-effect rounded-2xl p-8 max-w-2xl w-full my-8 animate-fade-in border-2 border-primary-blue/30">
+              <div className="text-center mb-8">
                 <div className="text-5xl mb-3">🏏</div>
-                <h3 className="text-2xl font-bold gradient-text mb-2">New Batsman</h3>
-                <p className="text-gray-400 text-sm">Wicket! Select new batsman:</p>
+                <h3 className="text-3xl font-bold gradient-text mb-2">Select New Batsman</h3>
+                <p className="text-gray-400">Choose the next batsman to come to the crease</p>
               </div>
-              <div className="space-y-3 mb-6 max-h-96 overflow-y-auto pr-2">
-                {matchData?.battingTeam === matchData?.teamA.name 
-                  ? matchData?.teamA.players
-                      .filter(player => {
-                        // Filter out players who are already out
-                        const battingRecord = matchData.battingRecords.find(
-                          record => record.playerName === player && record.innings === matchData.currentInnings
-                        );
-                        return !battingRecord || !battingRecord.isOut;
-                      })
-                      .map((player, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setNewBatsmanName(player)}
-                          className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                            newBatsmanName === player
-                              ? 'bg-primary-blue text-white'
-                              : 'bg-white/5 hover:bg-white/10'
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {matchData?.battingTeam === matchData?.teamA.name
+                  ? matchData?.teamA.players.map((player, idx) => {
+                    // Check status
+                    const battingRecord = matchData.battingRecords.find(
+                      record => record.playerName === player && record.innings === matchData.currentInnings
+                    );
+                    const isOut = battingRecord?.isOut;
+                    const isBatting = (matchData.striker?.name === player || matchData.nonStriker?.name === player);
+                    const isDisabled = isOut || isBatting;
+                    const isSelected = newBatsmanName === player;
+
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => !isDisabled && setNewBatsmanName(player)}
+                        disabled={isDisabled}
+                        className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
+                            ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                            : isDisabled
+                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
-                        >
-                          {player}
-                        </button>
-                      ))
-                  : matchData?.teamB.players
-                      .filter(player => {
-                        // Filter out players who are already out
-                        const battingRecord = matchData.battingRecords.find(
-                          record => record.playerName === player && record.innings === matchData.currentInnings
-                        );
-                        return !battingRecord || !battingRecord.isOut;
-                      })
-                      .map((player, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setNewBatsmanName(player)}
-                          className={`w-full px-4 py-3 rounded-lg font-medium transition-all ${
-                            newBatsmanName === player
-                              ? 'bg-primary-blue text-white'
-                              : 'bg-white/5 hover:bg-white/10'
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className={`font-bold text-lg ${isSelected ? 'text-primary-blue' : 'text-white'}`}>
+                              {player}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">Batsman</div>
+                          </div>
+                          {isSelected && (
+                            <div className="h-6 w-6 rounded-full bg-primary-blue flex items-center justify-center text-white text-xs">
+                              ✓
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          {isOut && <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">OUT</span>}
+                          {isBatting && <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded">BATTING</span>}
+                          {!isOut && !isBatting && <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded">YET TO BAT</span>}
+                        </div>
+                      </button>
+                    );
+                  })
+                  : matchData?.teamB.players.map((player, idx) => {
+                    // Check status
+                    const battingRecord = matchData.battingRecords.find(
+                      record => record.playerName === player && record.innings === matchData.currentInnings
+                    );
+                    const isOut = battingRecord?.isOut;
+                    const isBatting = (matchData.striker?.name === player || matchData.nonStriker?.name === player);
+                    const isDisabled = isOut || isBatting;
+                    const isSelected = newBatsmanName === player;
+
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => !isDisabled && setNewBatsmanName(player)}
+                        disabled={isDisabled}
+                        className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
+                            ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                            : isDisabled
+                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
-                        >
-                          {player}
-                        </button>
-                      ))
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className={`font-bold text-lg ${isSelected ? 'text-primary-blue' : 'text-white'}`}>
+                              {player}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">Batsman</div>
+                          </div>
+                          {isSelected && (
+                            <div className="h-6 w-6 rounded-full bg-primary-blue flex items-center justify-center text-white text-xs">
+                              ✓
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          {isOut && <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">OUT</span>}
+                          {isBatting && <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded">BATTING</span>}
+                          {!isOut && !isBatting && <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded">YET TO BAT</span>}
+                        </div>
+                      </button>
+                    );
+                  })
                 }
               </div>
-              <button
-                onClick={addNewBatsman}
-                disabled={!newBatsmanName || loading}
-                className="w-full py-3 bg-gradient-to-r from-primary-blue to-primary-green rounded-lg font-bold hover:scale-105 transition-transform disabled:opacity-50"
-              >
-                Continue
-              </button>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={addNewBatsman}
+                  disabled={!newBatsmanName || loading}
+                  className="px-8 py-3 bg-gradient-to-r from-primary-blue to-primary-green rounded-xl font-bold hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                >
+                  Confirm Batsman
+                </button>
+              </div>
             </div>
           </div>
         )}

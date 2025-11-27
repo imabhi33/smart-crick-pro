@@ -11,6 +11,7 @@ const Navbar = () => {
   const publicLinks = [
     { path: '/', label: 'Home' },
     { path: '/live-matches', label: '🔴 Live Matches' },
+    { path: '/all-matches', label: '📋 All Matches' },
     { path: '/score-predictor', label: 'Score Predictor' },
     { path: '/shot-analyzer', label: 'Shot Analyzer' },
     { path: '/match-simulator', label: 'Match Simulator' },
@@ -22,7 +23,7 @@ const Navbar = () => {
 
   // Determine which links to show based on user role
   let navLinks = [...publicLinks];
-  
+
   if (isAdmin()) {
     // Admin gets admin dashboard + scorecard creation + public links
     navLinks = [
@@ -52,9 +53,9 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2 group">
             <div className="relative">
-              <img 
-                src="/logo.png" 
-                alt="SmartCrick Pro" 
+              <img
+                src="/logo.png"
+                alt="SmartCrick Pro"
                 className="h-9 w-9 transition-transform group-hover:scale-110"
               />
             </div>
@@ -70,11 +71,10 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  location.pathname === link.path
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${location.pathname === link.path
                     ? 'bg-primary-blue/20 text-primary-blue border border-primary-blue/30'
                     : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                }`}
+                  }`}
               >
                 {link.label}
               </Link>
@@ -105,11 +105,10 @@ const Navbar = () => {
                     <div className="text-gray-400">Welcome</div>
                     <div className="font-semibold text-white">{user?.name?.split(' ')[0]}</div>
                   </div>
-                  <div className={`px-2 py-1 rounded text-xs font-bold ${
-                    isAdmin() ? 'bg-red-500/20 text-red-400' :
-                    isMatchCreator() ? 'bg-blue-500/20 text-blue-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
+                  <div className={`px-2 py-1 rounded text-xs font-bold ${isAdmin() ? 'bg-red-500/20 text-red-400' :
+                      isMatchCreator() ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-gray-500/20 text-gray-400'
+                    }`}>
                     {isAdmin() ? 'Admin' : isMatchCreator() ? 'Creator' : 'Viewer'}
                   </div>
                 </div>
@@ -162,11 +161,10 @@ const Navbar = () => {
                   key={link.path}
                   to={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                    location.pathname === link.path
+                  className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${location.pathname === link.path
                       ? 'bg-primary-blue/20 text-primary-blue border border-primary-blue/30'
                       : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                  }`}
+                    }`}
                 >
                   {link.label}
                 </Link>
@@ -200,11 +198,10 @@ const Navbar = () => {
                         <div className="text-xs text-gray-400">Welcome</div>
                         <div className="font-semibold text-white text-sm">{user?.name}</div>
                       </div>
-                      <div className={`px-2 py-1 rounded text-xs font-bold ${
-                        isAdmin() ? 'bg-red-500/20 text-red-400' :
-                        isMatchCreator() ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
+                      <div className={`px-2 py-1 rounded text-xs font-bold ${isAdmin() ? 'bg-red-500/20 text-red-400' :
+                          isMatchCreator() ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-gray-500/20 text-gray-400'
+                        }`}>
                         {isAdmin() ? 'Admin' : isMatchCreator() ? 'Creator' : 'Viewer'}
                       </div>
                     </div>
