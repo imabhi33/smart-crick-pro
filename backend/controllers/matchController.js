@@ -110,7 +110,7 @@ const startMatch = async (req, res) => {
 
     // Initialize batting records for striker and non-striker
     const battingPosition = match.battingRecords.filter(b => b.innings === match.currentInnings).length;
-    
+
     match.battingRecords.push({
       innings: match.currentInnings,
       teamName: match.battingTeam,
@@ -180,8 +180,9 @@ const updateBattingRecord = (match, playerName, runs, balls, fours, sixes, isOut
   const record = match.battingRecords.find(
     b => b.innings === match.currentInnings && b.playerName === playerName
   );
-  
+
   if (record) {
+    // FIXED: Properly set the accumulated values (these are already accumulated in match.striker)
     record.runs = runs;
     record.balls = balls;
     record.fours = fours;
@@ -195,12 +196,30 @@ const updateBattingRecord = (match, playerName, runs, balls, fours, sixes, isOut
   }
 };
 
+// Helper function to reload batsman data from batting records
+const reloadBatsmanFromRecord = (match, playerName) => {
+  const record = match.battingRecords.find(
+    b => b.innings === match.currentInnings && b.playerName === playerName
+  );
+
+  if (record) {
+    return {
+      name: record.playerName,
+      runs: record.runs || 0,
+      balls: record.balls || 0,
+      fours: record.fours || 0,
+      sixes: record.sixes || 0
+    };
+  }
+  return null;
+};
+
 // Helper function to update bowling record
 const updateBowlingRecord = (match, playerName, balls, runs, wickets, wides, noBalls) => {
   let record = match.bowlingRecords.find(
     b => b.innings === match.currentInnings && b.playerName === playerName
   );
-  
+
   if (!record) {
     // Create new bowling record if doesn't exist
     match.bowlingRecords.push({
@@ -218,14 +237,15 @@ const updateBowlingRecord = (match, playerName, balls, runs, wickets, wides, noB
     });
     record = match.bowlingRecords[match.bowlingRecords.length - 1];
   }
-  
+
   // Ensure all values are valid numbers
   record.balls = Number(balls) || 0;
   record.overs = Math.floor(record.balls / 6);
   record.runs = Number(runs) || 0;
   record.wickets = Number(wickets) || 0;
-  record.wides = Number(wides) || 0;
-  record.noBalls = Number(noBalls) || 0;
+  // FIXED: Accumulate wides and no-balls instead of setting them
+  record.wides += Number(wides) || 0;
+  record.noBalls += Number(noBalls) || 0;
   const overs = record.balls / 6;
   record.economy = overs > 0 ? Number((record.runs / overs).toFixed(2)) : 0;
 };
@@ -247,7 +267,7 @@ const updateScore = async (req, res) => {
 
     // If only changing players (no actual scoring), skip validation
     const isOnlyPlayerChange = (newBowler || newBatsman) && runs === 0 && !isWide && !isNoBall && !isWicket;
-    
+
     if (!isOnlyPlayerChange) {
       // Check if bowler is selected (skip if newBowler is being provided)
       if (!newBowler && (!match.currentBowler || !match.currentBowler.name)) {
@@ -290,7 +310,7 @@ const updateScore = async (req, res) => {
         match.striker.balls += 1;
         if (runs === 4) match.striker.fours += 1;
         if (runs === 6) match.striker.sixes += 1;
-        
+
         // Update batting record
         updateBattingRecord(
           match,
@@ -336,27 +356,41 @@ const updateScore = async (req, res) => {
       if (isLegalDelivery) {
         currentInnings.balls += 1;
         match.currentOver.push({ runs, isWide, isNoBall, isWicket });
-        
+
         // Check if over complete
         if (currentInnings.balls % 6 === 0) {
           currentInnings.overs += 1;
           if (match.currentBowler) {
             match.currentBowler.overs = Math.floor(match.currentBowler.balls / 6);
-            
+
             // Check for maiden
             if (match.currentBowler.currentOverRuns === 0 && match.currentOver.every(b => !b.isWide && !b.isNoBall)) {
               match.currentBowler.maidens += 1;
             }
           }
-          
+
           match.currentOver = [];
           if (match.currentBowler) match.currentBowler.currentOverRuns = 0;
-          
+
           // Change strike at end of over
           const temp = match.striker;
           match.striker = match.nonStriker;
           match.nonStriker = temp;
-          
+
+          // FIXED: Reload batsman data from batting records after over completion
+          if (match.striker && match.striker.name) {
+            const strikerData = reloadBatsmanFromRecord(match, match.striker.name);
+            if (strikerData) {
+              match.striker = strikerData;
+            }
+          }
+          if (match.nonStriker && match.nonStriker.name) {
+            const nonStrikerData = reloadBatsmanFromRecord(match, match.nonStriker.name);
+            if (nonStrikerData) {
+              match.nonStriker = nonStrikerData;
+            }
+          }
+
           // Need new bowler
           if (!newBowler) {
             match.currentBowler = null;
@@ -367,7 +401,7 @@ const updateScore = async (req, res) => {
       // Handle wicket
       if (isWicket) {
         currentInnings.wickets += 1;
-        
+
         // Update batting record as out
         if (match.striker && match.currentBowler) {
           updateBattingRecord(
@@ -381,7 +415,7 @@ const updateScore = async (req, res) => {
             dismissalType || 'bowled',
             match.currentBowler.name
           );
-          
+
           // Save to player stats
           await Player.create({
             name: match.striker.name,
@@ -395,7 +429,7 @@ const updateScore = async (req, res) => {
             isOut: true
           });
         }
-        
+
         if (newBatsman && currentInnings.wickets < 10) {
           // Add new batsman to batting records
           const battingPosition = match.battingRecords.filter(b => b.innings === match.currentInnings).length;
@@ -411,7 +445,7 @@ const updateScore = async (req, res) => {
             isOut: false,
             position: battingPosition + 1
           });
-          
+
           match.striker = { name: newBatsman, runs: 0, balls: 0, fours: 0, sixes: 0 };
         } else {
           match.striker = null;
@@ -420,9 +454,24 @@ const updateScore = async (req, res) => {
 
       // Strike rotation on odd runs
       if (!isWicket && isLegalDelivery && (runs === 1 || runs === 3)) {
+        // Swap striker and non-striker
         const temp = match.striker;
         match.striker = match.nonStriker;
         match.nonStriker = temp;
+
+        // FIXED: Reload batsman data from batting records to ensure correct names and stats
+        if (match.striker && match.striker.name) {
+          const strikerData = reloadBatsmanFromRecord(match, match.striker.name);
+          if (strikerData) {
+            match.striker = strikerData;
+          }
+        }
+        if (match.nonStriker && match.nonStriker.name) {
+          const nonStrikerData = reloadBatsmanFromRecord(match, match.nonStriker.name);
+          if (nonStrikerData) {
+            match.nonStriker = nonStrikerData;
+          }
+        }
       }
     } // End of !isOnlyPlayerChange block
 
@@ -432,7 +481,7 @@ const updateScore = async (req, res) => {
       const existingBatsman = match.battingRecords.find(
         b => b.innings === match.currentInnings && b.playerName === newBatsman
       );
-      
+
       if (!existingBatsman) {
         // Add new batsman to batting records
         const battingPosition = match.battingRecords.filter(b => b.innings === match.currentInnings).length;
@@ -449,7 +498,7 @@ const updateScore = async (req, res) => {
           position: battingPosition + 1
         });
       }
-      
+
       // Replace striker with new batsman
       match.striker = { name: newBatsman, runs: 0, balls: 0, fours: 0, sixes: 0 };
     }
@@ -460,7 +509,7 @@ const updateScore = async (req, res) => {
       const existingBowler = match.bowlingRecords.find(
         b => b.innings === match.currentInnings && b.playerName === newBowler
       );
-      
+
       if (existingBowler) {
         match.currentBowler = {
           name: newBowler,
@@ -485,14 +534,14 @@ const updateScore = async (req, res) => {
           wides: 0,
           noBalls: 0
         });
-        match.currentBowler = { 
-          name: newBowler, 
-          overs: 0, 
-          balls: 0, 
-          runs: 0, 
-          wickets: 0, 
-          maidens: 0, 
-          currentOverRuns: 0 
+        match.currentBowler = {
+          name: newBowler,
+          overs: 0,
+          balls: 0,
+          runs: 0,
+          wickets: 0,
+          maidens: 0,
+          currentOverRuns: 0
         };
       }
     }
@@ -518,12 +567,12 @@ const updateScore = async (req, res) => {
         // Start innings 2
         match.currentInnings = 2;
         match.status = 'innings2';
-        
+
         // Swap teams
         const tempTeam = match.battingTeam;
         match.battingTeam = match.bowlingTeam;
         match.bowlingTeam = tempTeam;
-        
+
         match.innings2 = {
           battingTeam: match.battingTeam,
           runs: 0,
@@ -532,7 +581,7 @@ const updateScore = async (req, res) => {
           balls: 0,
           extras: { wides: 0, noBalls: 0, byes: 0, legByes: 0 }
         };
-        
+
         // Reset players (will be selected again)
         match.striker = null;
         match.nonStriker = null;
@@ -541,7 +590,7 @@ const updateScore = async (req, res) => {
       } else {
         // Match complete
         match.status = 'completed';
-        
+
         // Determine winner
         if (match.innings2.runs > match.innings1.runs) {
           const wicketsLeft = 10 - match.innings2.wickets;

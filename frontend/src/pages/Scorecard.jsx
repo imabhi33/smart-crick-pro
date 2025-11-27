@@ -978,7 +978,8 @@ const Scorecard = () => {
                           {record.playerName === matchData.currentBowler?.name && <span className="text-primary-green ml-1">*</span>}
                         </td>
                         <td className="text-center py-3 px-2 text-gray-400">
-                          {record.overs}.{record.balls % 6}
+                          {/* FIXED: Calculate overs from total balls for consistency */}
+                          {Math.floor(record.balls / 6)}.{record.balls % 6}
                         </td>
                         <td className="text-center py-3 px-2 font-bold">{record.runs}</td>
                         <td className="text-center py-3 px-2 text-red-400 font-bold">{record.wickets}</td>
@@ -1011,7 +1012,9 @@ const Scorecard = () => {
               <div className="text-2xl font-bold text-white">
                 {(() => {
                   const innings = matchData.currentInnings === 1 ? matchData.innings1 : matchData.innings2;
-                  const overs = innings.overs + (innings.balls % 6) / 6;
+                  // FIXED: Use total balls for accurate calculation
+                  const totalBalls = innings.balls;
+                  const overs = totalBalls / 6;
                   return overs > 0 ? (innings.runs / overs).toFixed(2) : '0.00';
                 })()}
               </div>
@@ -1036,7 +1039,16 @@ const Scorecard = () => {
                 <div className="p-3 bg-white/5 rounded-xl col-span-2 md:col-span-2">
                   <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Match Equation</div>
                   <div className="text-xl font-bold text-white">
-                    Need <span className="text-primary-green">{matchData.innings1.runs + 1 - matchData.innings2.runs}</span> runs in <span className="text-primary-blue">{(matchData.totalOvers * 6) - matchData.innings2.balls}</span> balls
+                    {/* FIXED: Show 'Target Achieved!' instead of negative runs */}
+                    {(() => {
+                      const runsNeeded = matchData.innings1.runs + 1 - matchData.innings2.runs;
+                      const ballsRemaining = (matchData.totalOvers * 6) - matchData.innings2.balls;
+                      return runsNeeded > 0 ? (
+                        <>Need <span className="text-primary-green">{runsNeeded}</span> runs in <span className="text-primary-blue">{ballsRemaining}</span> balls</>
+                      ) : (
+                        <span className="text-primary-green">🎉 Target Achieved!</span>
+                      );
+                    })()}
                   </div>
                 </div>
               </>
@@ -1085,10 +1097,10 @@ const Scorecard = () => {
                         onClick={() => !isLastBowler && setNewBowlerName(player)}
                         disabled={isLastBowler}
                         className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
-                            ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                            : isLastBowler
-                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
-                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                          : isLastBowler
+                            ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
                       >
                         <div className="flex justify-between items-start">
@@ -1127,10 +1139,10 @@ const Scorecard = () => {
                         onClick={() => !isLastBowler && setNewBowlerName(player)}
                         disabled={isLastBowler}
                         className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
-                            ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                            : isLastBowler
-                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
-                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          ? 'bg-primary-green/20 border-primary-green shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                          : isLastBowler
+                            ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
                       >
                         <div className="flex justify-between items-start">
@@ -1197,10 +1209,10 @@ const Scorecard = () => {
                         onClick={() => !isDisabled && setNewBatsmanName(player)}
                         disabled={isDisabled}
                         className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
-                            ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
-                            : isDisabled
-                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
-                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                          : isDisabled
+                            ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
                       >
                         <div className="flex justify-between items-start">
@@ -1240,10 +1252,10 @@ const Scorecard = () => {
                         onClick={() => !isDisabled && setNewBatsmanName(player)}
                         disabled={isDisabled}
                         className={`relative p-4 rounded-xl text-left transition-all duration-200 border ${isSelected
-                            ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
-                            : isDisabled
-                              ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
-                              : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          ? 'bg-primary-blue/20 border-primary-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                          : isDisabled
+                            ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                           }`}
                       >
                         <div className="flex justify-between items-start">
