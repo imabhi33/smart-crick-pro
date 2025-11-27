@@ -14,14 +14,33 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // In development, allow localhost
+    if (process.env.NODE_ENV !== 'production') {
+      const allowedLocalOrigins = ['http://localhost:4000', 'http://localhost:5173', 'http://localhost:3000'];
+      if (allowedLocalOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+    }
+
+    // In production, allow specific domains and all Vercel preview URLs
+    const allowedOrigins = [
       'https://smartcric.vercel.app',
       'https://smart-crick-pro.vercel.app',
       'https://smart-crick-pro.netlify.app',
       process.env.FRONTEND_URL
-    ].filter(Boolean)
-    : ['http://localhost:4000', 'http://localhost:5173', 'http://localhost:3000'],
+    ].filter(Boolean);
+
+    // Check if origin matches allowed origins or is a Vercel preview URL
+    if (allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
