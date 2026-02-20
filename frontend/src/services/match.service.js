@@ -13,6 +13,12 @@ const matchService = {
     return response.data;
   },
 
+  // Configure match players (roles, captain, etc.)
+  configureMatchPlayers: async (matchId, data) => {
+    const response = await apiClient.post(`/matches/${matchId}/configure-players`, data);
+    return response.data;
+  },
+
   // Update score
   updateScore: async (matchId, scoreData) => {
     const response = await apiClient.post(`/matches/${matchId}/score`, scoreData);

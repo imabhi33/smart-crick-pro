@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import matchService from '../services/match.service';
+import CSVUploader from '../components/CSVUploader';
 
 const Scorecard = () => {
   const { id } = useParams(); // Get match ID from URL
@@ -15,8 +16,8 @@ const Scorecard = () => {
     groundName: '',
     location: '',
     totalOvers: '',
-    teamA: { name: '', players: ['', '', '', '', '', '', '', '', '', '', ''] },
-    teamB: { name: '', players: ['', '', '', '', '', '', '', '', '', '', ''] },
+    teamA: { name: '', players: Array.from({ length: 11 }, () => ({ name: '', role: '', captain: false, viceCaptain: false, wicketKeeper: false })) },
+    teamB: { name: '', players: Array.from({ length: 11 }, () => ({ name: '', role: '', captain: false, viceCaptain: false, wicketKeeper: false })) },
     battingTeam: ''
   });
 
@@ -39,6 +40,12 @@ const Scorecard = () => {
   const [newBatsmanName, setNewBatsmanName] = useState('');
   const [showEndMatchModal, setShowEndMatchModal] = useState(false);
   const [endMatchPassword, setEndMatchPassword] = useState('');
+
+  // CSV Upload
+  const [showCSVUploaderA, setShowCSVUploaderA] = useState(false);
+  const [showCSVUploaderB, setShowCSVUploaderB] = useState(false);
+  const [showPlayerConfig, setShowPlayerConfig] = useState(false);
+  const [playerConfigState, setPlayerConfigState] = useState(null);
 
   // Access Control: Only match creators and admins can create/edit matches
   // Public users can only view matches
@@ -83,7 +90,11 @@ const Scorecard = () => {
         // Check if we need to show player selection
         // This happens when: status is setup OR when innings starts but no players selected yet
         if (response.data.status === 'setup') {
-          setShowPlayerSelection(true);
+          if (!response.data.battingTeam) {
+            setShowPlayerConfig(true);
+          } else {
+            setShowPlayerSelection(true);
+          }
           setGameStarted(false);
         } else if ((response.data.status === 'innings1' || response.data.status === 'innings2') &&
           (!response.data.striker || !response.data.nonStriker || !response.data.currentBowler)) {
@@ -135,17 +146,11 @@ const Scorecard = () => {
       }
 
       // Check all players are filled
-      const teamAFilled = matchSetup.teamA.players.every(p => p.trim() !== '');
-      const teamBFilled = matchSetup.teamB.players.every(p => p.trim() !== '');
+      const teamAFilled = matchSetup.teamA.players.every(p => (typeof p === 'object' ? p.name : p).trim() !== '');
+      const teamBFilled = matchSetup.teamB.players.every(p => (typeof p === 'object' ? p.name : p).trim() !== '');
 
       if (!teamAFilled || !teamBFilled) {
         setError('Please enter all 11 players for both teams');
-        setLoading(false);
-        return;
-      }
-
-      if (!matchSetup.battingTeam) {
-        setError('Please select batting team');
         setLoading(false);
         return;
       }
@@ -155,12 +160,106 @@ const Scorecard = () => {
       if (response.success) {
         setCurrentMatchId(response.data._id);
         setMatchData(response.data);
-        setShowPlayerSelection(true);
+        setShowPlayerConfig(true);
       }
 
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create match');
+      setLoading(false);
+    }
+  };
+
+  // --- Player Configuration Logic ---
+
+  useEffect(() => {
+    if (showPlayerConfig && matchData) {
+      const processPlayers = (players) => players.map(p =>
+        typeof p === 'object' ? { ...p, role: p.role || '', captain: !!p.captain, viceCaptain: !!p.viceCaptain, wicketKeeper: !!p.wicketKeeper }
+          : { name: p, role: '', captain: false, viceCaptain: false, wicketKeeper: false }
+      );
+
+      setPlayerConfigState({
+        teamA: { ...matchData.teamA, players: processPlayers(matchData.teamA.players) },
+        teamB: { ...matchData.teamB, players: processPlayers(matchData.teamB.players) },
+        battingTeam: ''
+      });
+    }
+  }, [showPlayerConfig, matchData]);
+
+  const updatePlayerConfig = (teamIdx, index, field, value) => {
+    if (!playerConfigState) return;
+
+    const teamKey = teamIdx === 'A' ? 'teamA' : 'teamB';
+    const newConfig = { ...playerConfigState };
+    const players = [...newConfig[teamKey].players];
+
+    // Handle exclusive fields (Captain, VC, WK)
+    if (['captain', 'viceCaptain', 'wicketKeeper'].includes(field) && value === true) {
+      players.forEach((p, i) => {
+        if (i !== index) p[field] = false;
+      });
+    }
+
+    players[index] = { ...players[index], [field]: value };
+
+    setPlayerConfigState({
+      ...newConfig,
+      [teamKey]: { ...newConfig[teamKey], players }
+    });
+  };
+
+  const handleConfigSubmit = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      if (!playerConfigState) return;
+
+      // Validation
+      const validateTeam = (team, name) => {
+        const caps = team.players.filter(p => p.captain).length;
+        const vcs = team.players.filter(p => p.viceCaptain).length;
+        const wks = team.players.filter(p => p.wicketKeeper).length;
+
+        if (caps !== 1) throw new Error(`${name}: Please select exactly 1 Captain`);
+        if (vcs !== 1) throw new Error(`${name}: Please select exactly 1 Vice-Captain`);
+        if (wks !== 1) throw new Error(`${name}: Please select exactly 1 Wicket-Keeper`);
+      };
+
+      try {
+        validateTeam(playerConfigState.teamA, playerConfigState.teamA.name);
+        validateTeam(playerConfigState.teamB, playerConfigState.teamB.name);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!playerConfigState.battingTeam) {
+        setError('Please select which team will bat first');
+        setLoading(false);
+        return;
+      }
+
+      const response = await matchService.configureMatchPlayers(matchData._id, {
+        teamA: playerConfigState.teamA,
+        teamB: playerConfigState.teamB,
+        battingTeam: playerConfigState.battingTeam
+      });
+
+      if (response.success) {
+        setMatchData(response.data);
+        setShowPlayerConfig(false);
+        setShowPlayerSelection(true);
+      } else {
+        setError(response.message || 'Configuration failed');
+      }
+
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to configure players');
+    } finally {
       setLoading(false);
     }
   };
@@ -173,7 +272,6 @@ const Scorecard = () => {
 
       if (!selectedStriker || !selectedNonStriker || !selectedBowler) {
         setError('Please select all players');
-        setLoading(false);
         return;
       }
 
@@ -185,13 +283,15 @@ const Scorecard = () => {
 
       if (response.success) {
         setMatchData(response.data);
-        setGameStarted(true);
+        setGameStarted(true); // This triggers rendering of Scorecard view
         setShowPlayerSelection(false);
+      } else {
+        setError(response.message || 'Failed to start match');
       }
-
-      setLoading(false);
     } catch (err) {
+      console.error(err);
       setError(err.response?.data?.message || 'Failed to start match');
+    } finally {
       setLoading(false);
     }
   };
@@ -356,7 +456,11 @@ const Scorecard = () => {
 
   const updateTeamAPlayer = (index, value) => {
     const newPlayers = [...matchSetup.teamA.players];
-    newPlayers[index] = value;
+    if (typeof newPlayers[index] !== 'object') {
+      newPlayers[index] = { name: value, role: '', captain: false, viceCaptain: false, wicketKeeper: false };
+    } else {
+      newPlayers[index] = { ...newPlayers[index], name: value };
+    }
     setMatchSetup({
       ...matchSetup,
       teamA: { ...matchSetup.teamA, players: newPlayers }
@@ -365,22 +469,200 @@ const Scorecard = () => {
 
   const updateTeamBPlayer = (index, value) => {
     const newPlayers = [...matchSetup.teamB.players];
-    newPlayers[index] = value;
+    if (typeof newPlayers[index] !== 'object') {
+      newPlayers[index] = { name: value, role: '', captain: false, viceCaptain: false, wicketKeeper: false };
+    } else {
+      newPlayers[index] = { ...newPlayers[index], name: value };
+    }
     setMatchSetup({
       ...matchSetup,
       teamB: { ...matchSetup.teamB, players: newPlayers }
     });
   };
 
+  // Handle CSV Upload for Team A
+  const handleTeamAUpload = (uploadedPlayers) => {
+    const players = [...matchSetup.teamA.players];
+
+    // Map uploaded players to our structure
+    const newCtxPlayers = uploadedPlayers.slice(0, 11).map(p => ({
+      name: p.name || '',
+      role: p.role || '',
+      captain: false,
+      viceCaptain: false,
+      wicketKeeper: false
+    }));
+
+    for (let i = 0; i < 11; i++) {
+      if (i < newCtxPlayers.length && newCtxPlayers[i].name) {
+        players[i] = newCtxPlayers[i];
+      } else if (!players[i]) {
+        players[i] = { name: '', role: '', captain: false, viceCaptain: false, wicketKeeper: false };
+      }
+    }
+
+    setMatchSetup({
+      ...matchSetup,
+      teamA: { ...matchSetup.teamA, players }
+    });
+    setShowCSVUploaderA(false);
+  };
+
+  // Handle CSV Upload for Team B
+  const handleTeamBUpload = (uploadedPlayers) => {
+    const players = [...matchSetup.teamB.players];
+
+    // Map uploaded players to our structure
+    const newCtxPlayers = uploadedPlayers.slice(0, 11).map(p => ({
+      name: p.name || '',
+      role: p.role || '',
+      captain: false,
+      viceCaptain: false,
+      wicketKeeper: false
+    }));
+
+    for (let i = 0; i < 11; i++) {
+      if (i < newCtxPlayers.length && newCtxPlayers[i].name) {
+        players[i] = newCtxPlayers[i];
+      } else if (!players[i]) {
+        players[i] = { name: '', role: '', captain: false, viceCaptain: false, wicketKeeper: false };
+      }
+    }
+
+    setMatchSetup({
+      ...matchSetup,
+      teamB: { ...matchSetup.teamB, players }
+    });
+    setShowCSVUploaderB(false);
+  };
+
+  // Player Configuration Screen
+  if (showPlayerConfig && matchData && playerConfigState) {
+    const roles = ['Batsman', 'All-rounder', 'Bowler', 'Wicket Keeper'];
+
+    const renderTeamConfig = (teamKey, teamName) => (
+      <div className="glass-effect rounded-2xl p-6">
+        <h3 className="text-xl font-bold gradient-text mb-4">{teamName}</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-12 gap-2 text-xs uppercase text-gray-400 font-semibold mb-2">
+            <div className="col-span-4">Player</div>
+            <div className="col-span-4">Role</div>
+            <div className="col-span-1 text-center" title="Captain">C</div>
+            <div className="col-span-1 text-center" title="Vice Captain">VC</div>
+            <div className="col-span-2 text-center" title="Wicket Keeper">WK</div>
+          </div>
+
+          {playerConfigState[teamKey].players.map((player, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white/5 p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <div className="col-span-4 font-medium truncate" title={player.name}>
+                {player.name}
+              </div>
+              <div className="col-span-4">
+                <select
+                  value={player.role}
+                  onChange={(e) => updatePlayerConfig(teamKey === 'teamA' ? 'A' : 'B', idx, 'role', e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-primary-blue"
+                >
+                  <option value="">Select Role</option>
+                  {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div className="col-span-1 flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={player.captain}
+                  onChange={(e) => updatePlayerConfig(teamKey === 'teamA' ? 'A' : 'B', idx, 'captain', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-primary-blue focus:ring-primary-blue bg-transparent"
+                />
+              </div>
+              <div className="col-span-1 flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={player.viceCaptain}
+                  onChange={(e) => updatePlayerConfig(teamKey === 'teamA' ? 'A' : 'B', idx, 'viceCaptain', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-primary-blue focus:ring-primary-blue bg-transparent"
+                />
+              </div>
+              <div className="col-span-2 flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={player.wicketKeeper}
+                  onChange={(e) => updatePlayerConfig(teamKey === 'teamA' ? 'A' : 'B', idx, 'wicketKeeper', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-primary-blue focus:ring-primary-blue bg-transparent"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="min-h-screen py-12 px-4 pb-24">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl font-bold gradient-text mb-8 text-center">
+            Configure Squads
+          </h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {renderTeamConfig('teamA', playerConfigState.teamA.name)}
+            {renderTeamConfig('teamB', playerConfigState.teamB.name)}
+          </div>
+
+          <div className="glass-effect rounded-2xl p-8 max-w-2xl mx-auto text-center">
+            <h3 className="text-xl font-bold mb-6 text-white">Who will bat first?</h3>
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              <button
+                onClick={() => setPlayerConfigState(prev => ({ ...prev, battingTeam: prev.teamA.name }))}
+                className={`py-4 rounded-xl font-bold text-lg transition-all border-2 ${playerConfigState.battingTeam === playerConfigState.teamA.name
+                  ? 'bg-primary-blue border-primary-blue text-white shadow-lg shadow-blue-500/20'
+                  : 'bg-transparent border-white/10 hover:border-white/30 text-gray-300'
+                  }`}
+              >
+                {playerConfigState.teamA.name}
+              </button>
+              <button
+                onClick={() => setPlayerConfigState(prev => ({ ...prev, battingTeam: prev.teamB.name }))}
+                className={`py-4 rounded-xl font-bold text-lg transition-all border-2 ${playerConfigState.battingTeam === playerConfigState.teamB.name
+                  ? 'bg-primary-green border-primary-green text-black shadow-lg shadow-green-500/20'
+                  : 'bg-transparent border-white/10 hover:border-white/30 text-gray-300'
+                  }`}
+              >
+                {playerConfigState.teamB.name}
+              </button>
+            </div>
+
+            {error && (
+              <div className="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleConfigSubmit}
+              disabled={loading}
+              className="w-full btn-primary py-4 text-lg font-bold shadow-xl"
+            >
+              {loading ? 'Saving Configuration...' : 'Start Match'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Player Selection Screen
   if (showPlayerSelection && matchData) {
-    const battingTeamPlayers = matchData.battingTeam === matchData.teamA.name
-      ? matchData.teamA.players
-      : matchData.teamB.players;
+    // Helper to get player name regardless of format (string or object)
+    const getPlayerName = (p) => typeof p === 'object' ? p.name : p;
 
-    const bowlingTeamPlayers = matchData.bowlingTeam === matchData.teamA.name
+    const battingTeamPlayers = (matchData.battingTeam === matchData.teamA.name
       ? matchData.teamA.players
-      : matchData.teamB.players;
+      : matchData.teamB.players).map(getPlayerName);
+
+    const bowlingTeamPlayers = (matchData.bowlingTeam === matchData.teamA.name
+      ? matchData.teamA.players
+      : matchData.teamB.players).map(getPlayerName);
 
     const isInnings2 = matchData.currentInnings === 2;
     const targetScore = isInnings2 ? matchData.innings1.runs + 1 : null;
@@ -589,7 +871,17 @@ const Scorecard = () => {
 
             {/* Team A */}
             <div className="border-t border-white/10 pt-6">
-              <h3 className="text-2xl font-bold mb-4 text-primary-blue">Team A</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-primary-blue">Team A</h3>
+                <button
+                  onClick={() => setShowCSVUploaderA(!showCSVUploaderA)}
+                  className="btn-primary px-4 py-2 text-sm"
+                  title=" Upload players from CSV"
+                >
+                  {showCSVUploaderA ? '📝 Manual Entry' : '📊 Upload CSV'}
+                </button>
+              </div>
+
               <input
                 type="text"
                 placeholder="Team A Name"
@@ -597,23 +889,41 @@ const Scorecard = () => {
                 onChange={(e) => setMatchSetup({ ...matchSetup, teamA: { ...matchSetup.teamA, name: e.target.value } })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-blue mb-4"
               />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {matchSetup.teamA.players.map((player, idx) => (
-                  <input
-                    key={idx}
-                    type="text"
-                    placeholder={`Player ${idx + 1}`}
-                    value={player}
-                    onChange={(e) => updateTeamAPlayer(idx, e.target.value)}
-                    className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-blue text-sm"
-                  />
-                ))}
-              </div>
+
+              {showCSVUploaderA ? (
+                <CSVUploader
+                  onPlayersUploaded={handleTeamAUpload}
+                  teamName={matchSetup.teamA.name || 'Team A'}
+                />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {matchSetup.teamA.players.map((player, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      placeholder={`Player ${idx + 1}`}
+                      value={typeof player === 'object' ? player.name : player}
+                      onChange={(e) => updateTeamAPlayer(idx, e.target.value)}
+                      className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-blue text-sm"
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Team B */}
             <div className="border-t border-white/10 pt-6">
-              <h3 className="text-2xl font-bold mb-4 text-primary-green">Team B</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-primary-green">Team B</h3>
+                <button
+                  onClick={() => setShowCSVUploaderB(!showCSVUploaderB)}
+                  className="btn-primary px-4 py-2 text-sm"
+                  title="Upload players from CSV"
+                >
+                  {showCSVUploaderB ? '📝 Manual Entry' : '📊 Upload CSV'}
+                </button>
+              </div>
+
               <input
                 type="text"
                 placeholder="Team B Name"
@@ -621,46 +931,29 @@ const Scorecard = () => {
                 onChange={(e) => setMatchSetup({ ...matchSetup, teamB: { ...matchSetup.teamB, name: e.target.value } })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-green mb-4"
               />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {matchSetup.teamB.players.map((player, idx) => (
-                  <input
-                    key={idx}
-                    type="text"
-                    placeholder={`Player ${idx + 1}`}
-                    value={player}
-                    onChange={(e) => updateTeamBPlayer(idx, e.target.value)}
-                    className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-green text-sm"
-                  />
-                ))}
-              </div>
+
+              {showCSVUploaderB ? (
+                <CSVUploader
+                  onPlayersUploaded={handleTeamBUpload}
+                  teamName={matchSetup.teamB.name || 'Team B'}
+                />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {matchSetup.teamB.players.map((player, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      placeholder={`Player ${idx + 1}`}
+                      value={typeof player === 'object' ? player.name : player}
+                      onChange={(e) => updateTeamBPlayer(idx, e.target.value)}
+                      className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary-green text-sm"
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Batting Team Selection */}
-            <div className="border-t border-white/10 pt-6">
-              <label className="block text-lg font-medium mb-3 text-primary-green">Select Batting Team</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setMatchSetup({ ...matchSetup, battingTeam: matchSetup.teamA.name })}
-                  className={`py-4 rounded-lg font-bold text-lg transition-all ${matchSetup.battingTeam === matchSetup.teamA.name
-                    ? 'bg-primary-blue text-white'
-                    : 'bg-white/5 hover:bg-white/10'
-                    }`}
-                  disabled={!matchSetup.teamA.name}
-                >
-                  {matchSetup.teamA.name || 'Team A'}
-                </button>
-                <button
-                  onClick={() => setMatchSetup({ ...matchSetup, battingTeam: matchSetup.teamB.name })}
-                  className={`py-4 rounded-lg font-bold text-lg transition-all ${matchSetup.battingTeam === matchSetup.teamB.name
-                    ? 'bg-primary-green text-black'
-                    : 'bg-white/5 hover:bg-white/10'
-                    }`}
-                  disabled={!matchSetup.teamB.name}
-                >
-                  {matchSetup.teamB.name || 'Team B'}
-                </button>
-              </div>
-            </div>
+            {/* Batting Team Selection moved to Player Configuration step */}
 
             <button
               onClick={createMatch}
@@ -787,82 +1080,103 @@ const Scorecard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Current Batsmen */}
           <div className="lg:col-span-2 glass-effect rounded-2xl p-6">
-            <h3 className="text-xl font-bold mb-4 text-primary-blue">Current Batsmen</h3>
-            <div className="space-y-3">
-              {matchData?.striker && (() => {
-                // Check if striker is out
-                const strikerRecord = matchData.battingRecords?.find(
-                  record => record.playerName === matchData.striker.name && record.innings === matchData.currentInnings
-                );
-                const isStrikerOut = strikerRecord?.isOut;
+            <h3 className="text-xl font-bold mb-4 text-primary-blue flex items-center gap-2">
+              Did Batting
+            </h3>
 
-                return !isStrikerOut && (
-                  <div className="bg-white/5 rounded-lg p-4 border-l-4 border-primary-green">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-bold text-lg">{matchData.striker.name} *</span>
-                      <span className="text-2xl font-bold text-primary-green">{matchData.striker.runs}</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
-                      <div>Balls: {matchData.striker.balls}</div>
-                      <div>4s: {matchData.striker.fours}</div>
-                      <div>6s: {matchData.striker.sixes}</div>
-                      <div>SR: {calculateStrikeRate(matchData.striker.runs, matchData.striker.balls)}</div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {matchData?.nonStriker && (() => {
-                // Check if non-striker is out
-                const nonStrikerRecord = matchData.battingRecords?.find(
-                  record => record.playerName === matchData.nonStriker.name && record.innings === matchData.currentInnings
-                );
-                const isNonStrikerOut = nonStrikerRecord?.isOut;
-
-                return !isNonStrikerOut && (
-                  <div className="bg-white/5 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-bold text-lg">{matchData.nonStriker.name}</span>
-                      <span className="text-2xl font-bold">{matchData.nonStriker.runs}</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 text-sm text-gray-400">
-                      <div>Balls: {matchData.nonStriker.balls}</div>
-                      <div>4s: {matchData.nonStriker.fours}</div>
-                      <div>6s: {matchData.nonStriker.sixes}</div>
-                      <div>SR: {calculateStrikeRate(matchData.nonStriker.runs, matchData.nonStriker.balls)}</div>
-                    </div>
-                  </div>
-                );
-              })()}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-white/10">
+                    <th className="pb-3 font-medium pl-2">Batter</th>
+                    <th className="pb-3 font-medium text-right">Runs</th>
+                    <th className="pb-3 font-medium text-right">Balls</th>
+                    <th className="pb-3 font-medium text-right">4s</th>
+                    <th className="pb-3 font-medium text-right">6s</th>
+                    <th className="pb-3 font-medium text-right pr-2">SR</th>
+                  </tr>
+                </thead>
+                <tbody className="text-base">
+                  {/* Striker Row */}
+                  {matchData?.striker && (
+                    <tr className="border-b border-white/5 bg-white/5">
+                      <td className="py-4 pl-2 font-bold text-white flex items-center gap-2">
+                        {matchData.striker.name} <span className="text-[10px] bg-primary-green text-black px-1.5 py-0.5 rounded font-bold">STR</span>
+                      </td>
+                      <td className="py-4 text-right font-bold text-primary-green text-xl">
+                        {matchData.striker.runs}
+                      </td>
+                      <td className="py-4 text-right text-gray-300">
+                        {matchData.striker.balls}
+                      </td>
+                      <td className="py-4 text-right text-gray-400">{matchData.striker.fours}</td>
+                      <td className="py-4 text-right text-gray-400">{matchData.striker.sixes}</td>
+                      <td className="py-4 text-right text-gray-300 pr-2">{calculateStrikeRate(matchData.striker.runs, matchData.striker.balls)}</td>
+                    </tr>
+                  )}
+                  {/* NonStriker Row */}
+                  {matchData?.nonStriker && (
+                    <tr>
+                      <td className="py-4 pl-2 font-medium text-gray-300">
+                        {matchData.nonStriker.name}
+                      </td>
+                      <td className="py-4 text-right font-bold text-gray-200 text-xl">
+                        {matchData.nonStriker.runs}
+                      </td>
+                      <td className="py-4 text-right text-gray-400">
+                        {matchData.nonStriker.balls}
+                      </td>
+                      <td className="py-4 text-right text-gray-500">{matchData.nonStriker.fours}</td>
+                      <td className="py-4 text-right text-gray-500">{matchData.nonStriker.sixes}</td>
+                      <td className="py-4 text-right text-gray-500 pr-2">{calculateStrikeRate(matchData.nonStriker.runs, matchData.nonStriker.balls)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
           {/* Current Bowler */}
           <div className="glass-effect rounded-2xl p-6">
-            <h3 className="text-xl font-bold mb-4 text-primary-green">Current Bowler</h3>
-            {matchData?.currentBowler && (
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="font-bold text-lg mb-3">{matchData.currentBowler.name}</div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Overs:</span>
-                    <span className="font-bold">{matchData.currentBowler.overs}.{matchData.currentBowler.balls % 6}</span>
+            <h3 className="text-xl font-bold mb-4 text-primary-green flex items-center gap-2">
+              Bowling
+            </h3>
+            {matchData?.currentBowler ? (
+              <div className="bg-gradient-to-br from-white/5 to-transparent rounded-xl p-4 border border-white/5">
+                <div className="flex justify-between items-center mb-6">
+                  <span className="text-xl font-bold text-white">{matchData.currentBowler.name}</span>
+                  <span className="text-xs bg-white/10 text-gray-300 px-2 py-1 rounded-full border border-white/10">PACE</span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 text-center mb-4">
+                  <div className="bg-black/20 rounded-lg p-2">
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Overs</div>
+                    <div className="text-lg font-bold text-white">{matchData.currentBowler.overs}.{matchData.currentBowler.balls % 6}</div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Runs:</span>
-                    <span className="font-bold">{matchData.currentBowler.runs}</span>
+                  <div className="bg-black/20 rounded-lg p-2">
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Runs</div>
+                    <div className="text-lg font-bold text-white">{matchData.currentBowler.runs}</div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Wickets:</span>
-                    <span className="font-bold text-red-400">{matchData.currentBowler.wickets}</span>
+                  <div className="bg-black/20 rounded-lg p-2 border border-red-500/20">
+                    <div className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Wkts</div>
+                    <div className="text-lg font-bold text-red-500">{matchData.currentBowler.wickets}</div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Economy:</span>
-                    <span className="font-bold text-primary-blue">
-                      {calculateEconomy(matchData.currentBowler.runs, matchData.currentBowler.balls)}
-                    </span>
+                  <div className="bg-black/20 rounded-lg p-2">
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Maiden</div>
+                    <div className="text-lg font-bold text-gray-300">{matchData.currentBowler.maidens || 0}</div>
                   </div>
                 </div>
+
+                <div className="flex justify-between items-center px-2 pt-2 border-t border-white/5">
+                  <span className="text-sm text-gray-400">Economy</span>
+                  <span className="text-xl font-mono font-bold text-primary-green shadow-primary-green/20 drop-shadow-lg">
+                    {calculateEconomy(matchData.currentBowler.runs, matchData.currentBowler.balls)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500 py-12 bg-white/5 rounded-xl border border-dashed border-white/10">
+                <span>Waiting for bowler...</span>
               </div>
             )}
           </div>
@@ -1082,7 +1396,8 @@ const Scorecard = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {matchData?.bowlingTeam === matchData?.teamA.name
-                  ? matchData?.teamA.players.map((player, idx) => {
+                  ? matchData?.teamA.players.map((p, idx) => {
+                    const player = typeof p === 'object' ? p.name : p;
                     // Check if player just bowled the last over
                     const lastBall = matchData.ballByBall && matchData.ballByBall.length > 0
                       ? matchData.ballByBall[matchData.ballByBall.length - 1]
@@ -1124,7 +1439,8 @@ const Scorecard = () => {
                       </button>
                     );
                   })
-                  : matchData?.teamB.players.map((player, idx) => {
+                  : matchData?.teamB.players.map((p, idx) => {
+                    const player = typeof p === 'object' ? p.name : p;
                     // Check if player just bowled the last over
                     const lastBall = matchData.ballByBall && matchData.ballByBall.length > 0
                       ? matchData.ballByBall[matchData.ballByBall.length - 1]
@@ -1193,7 +1509,8 @@ const Scorecard = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {matchData?.battingTeam === matchData?.teamA.name
-                  ? matchData?.teamA.players.map((player, idx) => {
+                  ? matchData?.teamA.players.map((p, idx) => {
+                    const player = typeof p === 'object' ? p.name : p;
                     // Check status
                     const battingRecord = matchData.battingRecords.find(
                       record => record.playerName === player && record.innings === matchData.currentInnings
@@ -1236,7 +1553,8 @@ const Scorecard = () => {
                       </button>
                     );
                   })
-                  : matchData?.teamB.players.map((player, idx) => {
+                  : matchData?.teamB.players.map((p, idx) => {
+                    const player = typeof p === 'object' ? p.name : p;
                     // Check status
                     const battingRecord = matchData.battingRecords.find(
                       record => record.playerName === player && record.innings === matchData.currentInnings

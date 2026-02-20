@@ -10,7 +10,7 @@ const AdminDashboard = () => {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('applications');
   const [filterStatus, setFilterStatus] = useState('pending');
-  
+
   const { user, isAdmin } = useAuth();
 
   useEffect(() => {
@@ -22,7 +22,7 @@ const AdminDashboard = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load applications
       const appResponse = await applicationService.getAllApplications(filterStatus);
       if (appResponse.success) {
@@ -34,7 +34,7 @@ const AdminDashboard = () => {
       if (matchResponse.success) {
         setMatches(matchResponse.data);
       }
-      
+
       setLoading(false);
     } catch (err) {
       setError('Failed to load data');
@@ -158,21 +158,19 @@ const AdminDashboard = () => {
           <div className="flex space-x-1 mb-6">
             <button
               onClick={() => setActiveTab('applications')}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                activeTab === 'applications'
+              className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'applications'
                   ? 'bg-primary-blue text-white'
                   : 'hover:bg-white/10'
-              }`}
+                }`}
             >
               Applications
             </button>
             <button
               onClick={() => setActiveTab('matches')}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                activeTab === 'matches'
+              className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'matches'
                   ? 'bg-primary-blue text-white'
                   : 'hover:bg-white/10'
-              }`}
+                }`}
             >
               Matches
             </button>
@@ -278,7 +276,7 @@ const AdminDashboard = () => {
                   + Create New Match
                 </a>
               </div>
-              
+
               {loading ? (
                 <div className="text-center py-8">
                   <div className="text-2xl mb-2">⏳</div>
@@ -320,8 +318,8 @@ const AdminDashboard = () => {
                           <div className="text-sm text-gray-400">Current Score</div>
                           <div className="text-white">
                             {match.status === 'completed' ? 'Match Complete' :
-                             match.status === 'setup' ? 'Not Started' :
-                             `${match.currentInnings === 1 ? match.innings1?.runs : match.innings2?.runs}/${match.currentInnings === 1 ? match.innings1?.wickets : match.innings2?.wickets}`}
+                              match.status === 'setup' ? 'Not Started' :
+                                `${match.currentInnings === 1 ? match.innings1?.runs : match.innings2?.runs}/${match.currentInnings === 1 ? match.innings1?.wickets : match.innings2?.wickets}`}
                           </div>
                         </div>
                       </div>
@@ -329,16 +327,16 @@ const AdminDashboard = () => {
                       {/* Admin Actions */}
                       <div className="flex gap-3 pt-4 border-t border-white/10">
                         <a
-                          href={`/match/${match._id}`}
+                          href={match.status === 'completed' ? `/match/${match._id}` : `/scorecard/${match._id}`}
                           className="px-4 py-2 bg-primary-blue hover:bg-blue-600 rounded-lg font-semibold transition-colors text-sm"
                         >
-                          {match.status === 'completed' ? '👁️ View Match' : 
-                           match.status === 'setup' ? '🚀 Start Match' : 
-                           '📊 Manage Match'}
+                          {match.status === 'completed' ? '👁️ View Match' :
+                            match.status === 'setup' ? '🚀 Start Match' :
+                              '📊 Manage Match'}
                         </a>
                         {match.status !== 'completed' && (
                           <a
-                            href={`/match/${match._id}`}
+                            href={`/scorecard/${match._id}`}
                             className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold transition-colors text-sm"
                           >
                             ✏️ Edit Scorecard

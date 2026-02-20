@@ -12,6 +12,20 @@ const Commentary = ({ matchData }) => {
     // Sort by latest first
     const commentary = [...matchData.ballByBall].reverse();
 
+    // Helper function to get relative time
+    const getRelativeTime = (timestamp) => {
+        if (!timestamp) return 'Just now';
+
+        const now = new Date();
+        const past = new Date(timestamp);
+        const diffInSeconds = Math.floor((now - past) / 1000);
+
+        if (diffInSeconds < 60) return 'Just now';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hr ago`;
+        return past.toLocaleDateString();
+    };
+
     return (
         <div className="space-y-4">
             {commentary.map((ball, index) => (
@@ -26,14 +40,14 @@ const Commentary = ({ matchData }) => {
                                     {ball.bowler} to {ball.batsman}
                                 </span>
                                 <span className="text-xs text-gray-400">
-                                    {new Date(ball.timestamp).toLocaleTimeString()}
+                                    {ball.timestamp ? getRelativeTime(ball.timestamp) : 'Just now'}
                                 </span>
                             </div>
                         </div>
                         <div className={`px-3 py-1 rounded-lg font-bold ${ball.isWicket ? 'bg-red-500/20 text-red-400' :
-                                ball.runs === 4 ? 'bg-blue-500/20 text-blue-400' :
-                                    ball.runs === 6 ? 'bg-green-500/20 text-green-400' :
-                                        'bg-white/10 text-white'
+                            ball.runs === 4 ? 'bg-blue-500/20 text-blue-400' :
+                                ball.runs === 6 ? 'bg-green-500/20 text-green-400' :
+                                    'bg-white/10 text-white'
                             }`}>
                             {ball.isWicket ? 'OUT' :
                                 ball.isWide ? 'WD' :

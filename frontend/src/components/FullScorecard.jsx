@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
+import PlayerStatsModal from './PlayerStatsModal';
 
 const FullScorecard = ({ matchData }) => {
+    const [selectedPlayer, setSelectedPlayer] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
     if (!matchData) return null;
+
+    const handlePlayerClick = (playerName) => {
+        setSelectedPlayer(playerName);
+        setIsModalOpen(true);
+    };
 
     const renderInnings = (inningsData, battingRecords, bowlingRecords, teamName) => {
         if (!inningsData) return null;
@@ -36,7 +45,12 @@ const FullScorecard = ({ matchData }) => {
                         <tbody className="divide-y divide-white/10">
                             {teamBatting.map((record, idx) => (
                                 <tr key={idx} className="hover:bg-white/5 transition-colors">
-                                    <td className="p-3 font-medium text-primary-green">{record.playerName}</td>
+                                    <td
+                                        className="p-3 font-medium text-primary-green cursor-pointer hover:underline"
+                                        onClick={() => handlePlayerClick(record.playerName)}
+                                    >
+                                        {record.playerName}
+                                    </td>
                                     <td className="p-3 text-sm text-gray-400">
                                         {record.isOut ? (
                                             <span>
@@ -82,7 +96,12 @@ const FullScorecard = ({ matchData }) => {
                         <tbody className="divide-y divide-white/10">
                             {teamBowling.map((record, idx) => (
                                 <tr key={idx} className="hover:bg-white/5 transition-colors">
-                                    <td className="p-3 font-medium">{record.playerName}</td>
+                                    <td
+                                        className="p-3 font-medium cursor-pointer hover:underline text-blue-300"
+                                        onClick={() => handlePlayerClick(record.playerName)}
+                                    >
+                                        {record.playerName}
+                                    </td>
                                     <td className="p-3 text-right">{record.overs}</td>
                                     <td className="p-3 text-right">{record.maidens}</td>
                                     <td className="p-3 text-right">{record.runs}</td>
@@ -107,6 +126,12 @@ const FullScorecard = ({ matchData }) => {
                     {renderInnings(matchData.innings2, matchData.battingRecords.filter(r => r.innings === 2), matchData.bowlingRecords.filter(r => r.innings === 2), matchData.innings2.battingTeam)}
                 </>
             )}
+
+            <PlayerStatsModal
+                playerName={selectedPlayer}
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+            />
         </div>
     );
 };
