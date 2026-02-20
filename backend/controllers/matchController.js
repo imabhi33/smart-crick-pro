@@ -10,7 +10,7 @@ const createMatch = async (req, res) => {
     const { groundName, location, totalOvers, teamA, teamB, battingTeam, tossWinner, electedTo } = req.body;
 
     // Validation
-    if (!groundName || !location || !totalOvers || !teamA || !teamB || !battingTeam) {
+    if (!groundName || !location || !totalOvers || !teamA || !teamB) {
       return res.status(400).json({
         success: false,
         message: 'Please provide all required fields'
@@ -31,6 +31,8 @@ const createMatch = async (req, res) => {
       });
     }
 
+    // battingTeam is now optional - will be set in player configuration step
+
     // Create or get ground
     let ground = await Ground.findOne({ name: groundName, location });
     if (!ground) {
@@ -41,8 +43,8 @@ const createMatch = async (req, res) => {
       });
     }
 
-    // Determine bowling team
-    const bowlingTeam = battingTeam === teamA.name ? teamB.name : teamA.name;
+    // Determine bowling team (only if battingTeam is provided)
+    const bowlingTeam = battingTeam ? (battingTeam === teamA.name ? teamB.name : teamA.name) : null;
 
     // Create match
     const match = await Match.create({
@@ -53,10 +55,10 @@ const createMatch = async (req, res) => {
       totalOvers,
       teamA,
       teamB,
-      battingTeam,
-      bowlingTeam,
+      battingTeam: battingTeam || null,
+      bowlingTeam: bowlingTeam || null,
       innings1: {
-        battingTeam,
+        battingTeam: battingTeam || null,
         runs: 0,
         wickets: 0,
         overs: 0,
@@ -67,12 +69,105 @@ const createMatch = async (req, res) => {
       bowlingRecords: [],
       currentOver: [],
       status: 'setup',
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      tossWinner: tossWinner || null,
+      electedTo: electedTo || null
     });
 
     res.status(201).json({
       success: true,
       message: 'Match created successfully',
+      data: match
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Configure match players and set batting team
+// @route   POST /api/matches/:id/configure-players
+// @access  Private (Match Creator or Admin)
+const configureMatchPlayers = async (req, res) => {
+  try {
+    const { teamA, teamB, battingTeam } = req.body;
+    const match = await Match.findById(req.params.id);
+
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match not found'
+      });
+    }
+
+    // Validation
+    if (!teamA || !teamB || !battingTeam) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide team configurations and batting team'
+      });
+    }
+
+    if (!teamA.players || teamA.players.length !== 11) {
+      return res.status(400).json({
+        success: false,
+        message: 'Team A must have exactly 11 players'
+      });
+    }
+
+    if (!teamB.players || teamB.players.length !== 11) {
+      return res.status(400).json({
+        success: false,
+        message: 'Team B must have exactly 11 players'
+      });
+    }
+
+    // Validate captain, vice-captain, wicket-keeper for each team
+    const validateTeam = (team, teamName) => {
+      const captains = team.players.filter(p => typeof p === 'object' && p.captain);
+      const viceCaptains = team.players.filter(p => typeof p === 'object' && p.viceCaptain);
+      const wicketKeepers = team.players.filter(p => typeof p === 'object' && p.wicketKeeper);
+
+      if (captains.length !== 1) {
+        throw new Error(`${teamName} must have exactly 1 captain`);
+      }
+      if (viceCaptains.length !== 1) {
+        throw new Error(`${teamName} must have exactly 1 vice-captain`);
+      }
+      if (wicketKeepers.length !== 1) {
+        throw new Error(`${teamName} must have exactly 1 wicket-keeper`);
+      }
+    };
+
+    try {
+      validateTeam(teamA, 'Team A');
+      validateTeam(teamB, 'Team B');
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: validationError.message
+      });
+    }
+
+    // Determine bowling team
+    const bowlingTeam = battingTeam === match.teamA.name ? match.teamB.name : match.teamA.name;
+
+    // Update match
+    match.teamA.players = teamA.players;
+    match.teamB.players = teamB.players;
+    match.battingTeam = battingTeam;
+    match.bowlingTeam = bowlingTeam;
+    match.innings1.battingTeam = battingTeam;
+
+    await match.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Players configured successfully',
       data: match
     });
   } catch (error) {
@@ -105,6 +200,13 @@ const startMatch = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Please select striker, non-striker, and bowler'
+      });
+    }
+
+    if (striker === nonStriker) {
+      return res.status(400).json({
+        success: false,
+        message: 'Striker and Non-Striker must be different players'
       });
     }
 
@@ -156,6 +258,19 @@ const startMatch = async (req, res) => {
     match.striker = { name: striker, runs: 0, balls: 0, fours: 0, sixes: 0 };
     match.nonStriker = { name: nonStriker, runs: 0, balls: 0, fours: 0, sixes: 0 };
     match.currentBowler = { name: bowler, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0, currentOverRuns: 0 };
+
+    // Ensure innings2 initialized if needed
+    if (match.currentInnings === 2 && !match.innings2) {
+      match.innings2 = {
+        battingTeam: match.battingTeam,
+        runs: 0,
+        wickets: 0,
+        overs: 0,
+        balls: 0,
+        extras: { wides: 0, noBalls: 0, byes: 0, legByes: 0 }
+      };
+    }
+
     match.status = match.currentInnings === 1 ? 'innings1' : 'innings2';
 
     await match.save();
@@ -253,6 +368,9 @@ const updateBowlingRecord = (match, playerName, balls, runs, wickets, wides, noB
 // @desc    Update score (ball by ball)
 // @route   POST /api/matches/:id/score
 // @access  Public
+// @desc    Update score (ball by ball)
+// @route   POST /api/matches/:id/score
+// @access  Public
 const updateScore = async (req, res) => {
   try {
     const { runs, isWide, isNoBall, isWicket, dismissalType, newBatsman, newBowler } = req.body;
@@ -304,6 +422,7 @@ const updateScore = async (req, res) => {
         currentInnings.extras.noBalls += 1;
       }
 
+      // 1. Update Cumulative Stats (Striker & Bowler)
       // Update striker
       if (!isWicket && isLegalDelivery && match.striker) {
         match.striker.runs += runs;
@@ -352,53 +471,7 @@ const updateScore = async (req, res) => {
         );
       }
 
-      // Update balls and overs
-      if (isLegalDelivery) {
-        currentInnings.balls += 1;
-        match.currentOver.push({ runs, isWide, isNoBall, isWicket });
-
-        // Check if over complete
-        if (currentInnings.balls % 6 === 0) {
-          currentInnings.overs += 1;
-          if (match.currentBowler) {
-            match.currentBowler.overs = Math.floor(match.currentBowler.balls / 6);
-
-            // Check for maiden
-            if (match.currentBowler.currentOverRuns === 0 && match.currentOver.every(b => !b.isWide && !b.isNoBall)) {
-              match.currentBowler.maidens += 1;
-            }
-          }
-
-          match.currentOver = [];
-          if (match.currentBowler) match.currentBowler.currentOverRuns = 0;
-
-          // Change strike at end of over
-          const temp = match.striker;
-          match.striker = match.nonStriker;
-          match.nonStriker = temp;
-
-          // FIXED: Reload batsman data from batting records after over completion
-          if (match.striker && match.striker.name) {
-            const strikerData = reloadBatsmanFromRecord(match, match.striker.name);
-            if (strikerData) {
-              match.striker = strikerData;
-            }
-          }
-          if (match.nonStriker && match.nonStriker.name) {
-            const nonStrikerData = reloadBatsmanFromRecord(match, match.nonStriker.name);
-            if (nonStrikerData) {
-              match.nonStriker = nonStrikerData;
-            }
-          }
-
-          // Need new bowler
-          if (!newBowler) {
-            match.currentBowler = null;
-          }
-        }
-      }
-
-      // Handle wicket
+      // 2. Handle Wicket (BEFORE Over Completion Check)
       if (isWicket) {
         currentInnings.wickets += 1;
 
@@ -452,25 +525,51 @@ const updateScore = async (req, res) => {
         }
       }
 
-      // Strike rotation on odd runs
-      if (!isWicket && isLegalDelivery && (runs === 1 || runs === 3)) {
-        // Swap striker and non-striker
-        const temp = match.striker;
-        match.striker = match.nonStriker;
-        match.nonStriker = temp;
+      // 3. Update Balls and Overs (Check for Over Completion)
+      if (isLegalDelivery) {
+        currentInnings.balls += 1;
+        match.currentOver.push({ runs, isWide, isNoBall, isWicket });
 
-        // FIXED: Reload batsman data from batting records to ensure correct names and stats
-        if (match.striker && match.striker.name) {
-          const strikerData = reloadBatsmanFromRecord(match, match.striker.name);
-          if (strikerData) {
-            match.striker = strikerData;
+        // Check if over complete
+        if (currentInnings.balls % 6 === 0) {
+          currentInnings.overs += 1;
+          if (match.currentBowler) {
+            match.currentBowler.overs = Math.floor(match.currentBowler.balls / 6);
+
+            // Check for maiden
+            if (match.currentBowler.currentOverRuns === 0 && match.currentOver.every(b => !b.isWide && !b.isNoBall)) {
+              match.currentBowler.maidens += 1;
+            }
+          }
+
+          match.currentOver = [];
+          if (match.currentBowler) match.currentBowler.currentOverRuns = 0;
+
+          // Change strike at end of over
+          const currentStrikerName = match.striker.name;
+          const currentNonStrikerName = match.nonStriker.name;
+
+          if (currentStrikerName && currentNonStrikerName) {
+            match.striker = reloadBatsmanFromRecord(match, currentNonStrikerName);
+            match.nonStriker = reloadBatsmanFromRecord(match, currentStrikerName);
+          }
+
+          // Need new bowler
+          if (!newBowler) {
+            match.currentBowler = null;
           }
         }
-        if (match.nonStriker && match.nonStriker.name) {
-          const nonStrikerData = reloadBatsmanFromRecord(match, match.nonStriker.name);
-          if (nonStrikerData) {
-            match.nonStriker = nonStrikerData;
-          }
+      }
+
+      // Strike rotation on odd runs (only if NO wicket)
+      if (!isWicket && isLegalDelivery && (runs === 1 || runs === 3)) {
+        // Swap based on names to avoid reference issues
+        const currentStrikerName = match.striker.name;
+        const currentNonStrikerName = match.nonStriker.name;
+
+        if (currentStrikerName && currentNonStrikerName) {
+          match.striker = reloadBatsmanFromRecord(match, currentNonStrikerName);
+          match.nonStriker = reloadBatsmanFromRecord(match, currentStrikerName);
         }
       }
     } // End of !isOnlyPlayerChange block
@@ -499,8 +598,16 @@ const updateScore = async (req, res) => {
         });
       }
 
-      // Replace striker with new batsman
-      match.striker = { name: newBatsman, runs: 0, balls: 0, fours: 0, sixes: 0 };
+      // Smart Assignment: Fill empty slot if possible, otherwise default to replacing striker
+      const newBatsmanObj = { name: newBatsman, runs: 0, balls: 0, fours: 0, sixes: 0 };
+
+      if (!match.striker || !match.striker.name) {
+        match.striker = newBatsmanObj;
+      } else if (!match.nonStriker || !match.nonStriker.name) {
+        match.nonStriker = newBatsmanObj;
+      } else {
+        match.striker = newBatsmanObj; // Fallback: Replace striker
+      }
     }
 
     // Change bowler if provided
@@ -759,6 +866,7 @@ const getMyMatches = async (req, res) => {
 
 module.exports = {
   createMatch,
+  configureMatchPlayers,
   startMatch,
   updateScore,
   getMatch,

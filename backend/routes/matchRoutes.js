@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const {
   createMatch,
+  configureMatchPlayers,
   startMatch,
   updateScore,
   getMatch,
   getAllMatches,
-  getPlayerStats,
   getLiveMatches,
-  getMyMatches
+  getMyMatches,
+  getPlayerStats
 } = require('../controllers/matchController');
 const { endMatch } = require('../controllers/endMatchController');
 const { protect, matchCreatorOrAdmin, canEditMatch } = require('../middleware/auth');
@@ -19,6 +20,7 @@ router.get('/', getAllMatches);
 
 // Protected routes - Match Creator or Admin
 router.post('/', protect, matchCreatorOrAdmin, createMatch);
+router.post('/:id/configure-players', protect, canEditMatch, configureMatchPlayers); // Added this line
 router.get('/user/my-matches', protect, matchCreatorOrAdmin, getMyMatches);
 
 // Protected routes - Only match creator or admin can edit

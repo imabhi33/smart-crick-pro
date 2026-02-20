@@ -23,17 +23,29 @@ const matchSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  
+
   // Teams
   teamA: {
     name: { type: String, required: true },
-    players: [{ type: String }]
+    players: [{
+      type: mongoose.Schema.Types.Mixed, // Supports both String and Object for backward compatibility
+      // When object format:
+      // {
+      //   name: String,
+      //   role: String (optional: 'Batsman', 'All-rounder', 'Bowler', 'Wicket Keeper'),
+      //   captain: Boolean,
+      //   viceCaptain: Boolean,
+      //   wicketKeeper: Boolean
+      // }
+    }]
   },
   teamB: {
     name: { type: String, required: true },
-    players: [{ type: String }]
+    players: [{
+      type: mongoose.Schema.Types.Mixed, // Supports both String and Object for backward compatibility
+    }]
   },
-  
+
   // Current Match State
   currentInnings: {
     type: Number,
@@ -41,13 +53,13 @@ const matchSchema = new mongoose.Schema({
   },
   battingTeam: {
     type: String,
-    required: true
+    required: false // Will be set during player configuration step
   },
   bowlingTeam: {
     type: String,
-    required: true
+    required: false // Will be set during player configuration step
   },
-  
+
   // Innings 1
   innings1: {
     battingTeam: String,
@@ -62,7 +74,7 @@ const matchSchema = new mongoose.Schema({
       legByes: { type: Number, default: 0 }
     }
   },
-  
+
   // Innings 2
   innings2: {
     battingTeam: String,
@@ -77,7 +89,7 @@ const matchSchema = new mongoose.Schema({
       legByes: { type: Number, default: 0 }
     }
   },
-  
+
   // Complete Batting Records
   battingRecords: [{
     innings: Number,
@@ -93,7 +105,7 @@ const matchSchema = new mongoose.Schema({
     dismissedBy: String, // bowler name
     position: Number // batting order
   }],
-  
+
   // Complete Bowling Records
   bowlingRecords: [{
     innings: Number,
@@ -108,7 +120,7 @@ const matchSchema = new mongoose.Schema({
     wides: { type: Number, default: 0 },
     noBalls: { type: Number, default: 0 }
   }],
-  
+
   // Current Players
   striker: {
     name: String,
@@ -133,7 +145,7 @@ const matchSchema = new mongoose.Schema({
     maidens: { type: Number, default: 0 },
     currentOverRuns: { type: Number, default: 0 }
   },
-  
+
   // Current Over Balls
   currentOver: [{
     runs: Number,
@@ -141,7 +153,7 @@ const matchSchema = new mongoose.Schema({
     isNoBall: Boolean,
     isWicket: Boolean
   }],
-  
+
   // Match Status
   status: {
     type: String,
@@ -156,7 +168,7 @@ const matchSchema = new mongoose.Schema({
     type: String,
     default: null
   },
-  
+
   // Ball by Ball Commentary
   ballByBall: [{
     innings: Number,
@@ -171,7 +183,7 @@ const matchSchema = new mongoose.Schema({
     commentary: String,
     timestamp: { type: Date, default: Date.now }
   }],
-  
+
   // Partnership Records
   partnerships: [{
     innings: Number,
@@ -180,7 +192,7 @@ const matchSchema = new mongoose.Schema({
     runs: Number,
     balls: Number
   }],
-  
+
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -206,7 +218,7 @@ const matchSchema = new mongoose.Schema({
 });
 
 // Update timestamp on save
-matchSchema.pre('save', function(next) {
+matchSchema.pre('save', function (next) {
   this.updatedAt = Date.now();
   next();
 });

@@ -1,6 +1,8 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const connectDB = require('./config/db');
 
 // Load environment variables
@@ -11,6 +13,12 @@ connectDB();
 
 // Initialize Express app
 const app = express();
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Middleware
 app.use(cors({
@@ -51,6 +59,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/applications', require('./routes/applicationRoutes'));
 app.use('/api/matches', require('./routes/matchRoutes'));
 app.use('/api/stats', require('./routes/statsRoutes'));
+app.use('/api/players', require('./routes/playerRoutes'));
 
 // Health check route
 app.get('/', (req, res) => {
